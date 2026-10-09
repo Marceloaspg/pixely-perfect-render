@@ -1,10 +1,11 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { getCategory, products } from "@/data/catalog";
+import { catalogQuery, useCatalog } from "@/lib/catalog-context";
 import { PageHero, ProductCard } from "@/components/site/Layout";
 
 export const Route = createFileRoute("/categorias/$slug")({
-  loader: ({ params }) => {
-    const category = getCategory(params.slug);
+  loader: async ({ params, context }) => {
+    const catalog = await context.queryClient.ensureQueryData(catalogQuery);
+    const category = catalog.categories.find(c => c.slug === params.slug);
     if (!category) throw notFound();
     return { category };
   },
@@ -23,6 +24,7 @@ export const Route = createFileRoute("/categorias/$slug")({
 
 function CategoryPage() {
   const { category: c } = Route.useLoaderData();
+  const { products } = useCatalog();
   const list = products.filter((p) => p.category === c.slug);
   return (
     <>

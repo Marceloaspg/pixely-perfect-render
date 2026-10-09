@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { getProduct, segments } from "@/data/catalog";
+import { segments } from "@/data/catalog";
+import { useCatalog } from "@/lib/catalog-context";
+import { Button } from "@/components/ui/button";
 import { PageHero, ProductCard } from "@/components/site/Layout";
 
 export const Route = createFileRoute("/segmentos")({
@@ -16,6 +18,7 @@ export const Route = createFileRoute("/segmentos")({
 });
 
 function Segments() {
+  const { products } = useCatalog();
   const [active, setActive] = useState(segments[0]?.slug ?? "");
   const seg = segments.find((s) => s.slug === active);
   if (!seg) return null;
@@ -25,12 +28,12 @@ function Segments() {
       <section className="mx-auto max-w-7xl px-5 py-12">
         <div className="flex flex-wrap gap-2">
           {segments.map((s) => (
-            <button key={s.slug} onClick={() => setActive(s.slug)} className={`rounded-full px-5 py-2.5 text-sm font-semibold transition ${s.slug === active ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground hover:bg-border"}`}>{s.name}</button>
+            <Button key={s.slug} onClick={() => setActive(s.slug)} className={`rounded-full px-5 py-2.5 text-sm font-semibold transition ${s.slug === active ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground hover:bg-border"}`}>{s.name}</Button>
           ))}
         </div>
         <h2 className="mt-10 text-2xl font-extrabold text-navy">{seg.name}</h2>
         <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {seg.products.map((slug) => { const p = getProduct(slug); return p ? <ProductCard key={slug} p={p} /> : null; })}
+          {products.filter(p => seg.categories.some(c => c === p.category)).map(p => <ProductCard key={p.slug} p={p} />)}
         </div>
       </section>
     </>

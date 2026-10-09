@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { useCatalog } from "./catalog-context";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 export type QuoteItem = { slug: string; name: string; quantity: string };
@@ -19,10 +21,11 @@ const QuoteCtx = createContext<Ctx | null>(null);
 const KEY = "majesta-orcamento";
 
 export function QuoteProvider({ children }: { children: ReactNode }) {
+  const { products } = useCatalog();
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    try { setItems(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch { /* ignore */ }
+    try { const rows = z.array(z.object({slug:z.string(),name:z.string(),quantity:z.string()})).parse(JSON.parse(localStorage.getItem(KEY) || "[]")); setItems(rows.filter(i=>products.some(p=>p.slug===i.slug))); } catch { /* ignore */ }
     setReady(true);
   }, []);
   useEffect(() => { if (ready) localStorage.setItem(KEY, JSON.stringify(items)); }, [items, ready]);

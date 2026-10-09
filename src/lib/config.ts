@@ -7,8 +7,8 @@ export const siteConfig = {
   facebook: "",
 };
 
-export function whatsappLink(text: string) {
-  if (!/^\d{10,15}$/.test(siteConfig.whatsapp)) return undefined;
-  const base = `https://wa.me/${siteConfig.whatsapp}`;
+export function whatsappLink(text: string, number = siteConfig.whatsapp) {
+  if (!/^\d{10,15}$/.test(number)) return undefined;
+  const base = `https://wa.me/${number}`;
   return `${base}?text=${encodeURIComponent(text)}`;
 }

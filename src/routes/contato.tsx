@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { MessageCircle, Mail, Instagram, Facebook } from "lucide-react";
+import { useCatalog } from "@/lib/catalog-context";
 import { PageHero } from "@/components/site/Layout";
-import { siteConfig, whatsappLink } from "@/lib/config";
+import { whatsappLink } from "@/lib/config";
 
 export const Route = createFileRoute("/contato")({
   head: () => ({
@@ -16,6 +17,7 @@ export const Route = createFileRoute("/contato")({
 });
 
 function Contact() {
+  const { config: siteConfig } = useCatalog();
   const cards = [
     { icon: MessageCircle, label: "WhatsApp", value: "Iniciar conversa", href: whatsappLink("Olá, Majesta Embalagens!") },
     siteConfig.email && { icon: Mail, label: "E-mail comercial", value: siteConfig.email, href: `mailto:${siteConfig.email}` },
