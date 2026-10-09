@@ -16,8 +16,9 @@ export const Route = createFileRoute("/segmentos")({
 });
 
 function Segments() {
-  const [active, setActive] = useState(segments[0].slug);
-  const seg = segments.find((s) => s.slug === active)!;
+  const [active, setActive] = useState(segments[0]?.slug ?? "");
+  const seg = segments.find((s) => s.slug === active);
+  if (!seg) return null;
   return (
     <>
       <PageHero eyebrow="Soluções por segmento" title="Embalagens pensadas para o seu tipo de negócio" />
