@@ -1,14 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Layers, Headphones, ClipboardCheck, Store } from "lucide-react";
 import hero from "@/assets/hero.jpg";
-import { categories } from "@/data/catalog";
+import { useCatalog } from "@/lib/catalog-context";
 import { whatsappLink } from "@/lib/config";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Majesta Embalagens — Embalagens para delivery e food service" },
-      { name: "description", content: "Embalagens para hamburgueria, pizzaria, marmitaria e delivery. Caixas, sacos kraft, papéis, lacres e suprimentos. Solicite seu orçamento." },
+      { name: "description", content: "Embalagens para hamburguerias, lanchonetes e delivery em Amparo e região. Caixas, sacos kraft, papéis, lacres e suprimentos. Solicite seu orçamento." },
       { property: "og:title", content: "Majesta Embalagens — Embalagens para delivery e food service" },
       { property: "og:description", content: "A embalagem certa valoriza o seu negócio. Solicite seu orçamento pelo WhatsApp." },
     ],
@@ -20,10 +20,11 @@ const perks = [
   { icon: Layers, title: "Variedade de soluções", text: "Embalagens e suprimentos para diferentes etapas da operação." },
   { icon: Headphones, title: "Atendimento personalizado", text: "Orientação para encontrar a embalagem adequada ao seu produto." },
   { icon: ClipboardCheck, title: "Orçamento facilitado", text: "Monte sua lista no site e envie direto pelo WhatsApp." },
-  { icon: Store, title: "Para diversos segmentos", text: "Hamburguerias, pizzarias, marmitarias, lanchonetes e mais." },
+  { icon: Store, title: "Para diversos segmentos", text: "Hamburguerias, lanchonetes, hot dog e delivery." },
 ];
 
 function Index() {
+  const { categories } = useCatalog();
   return (
     <>
       <section className="relative overflow-hidden bg-navy">
@@ -33,10 +34,10 @@ function Index() {
           <div className="max-w-2xl animate-rise text-primary-foreground">
             <p className="text-xs font-bold uppercase tracking-[0.3em] text-gold">A embalagem certa valoriza o seu negócio</p>
             <h1 className="mt-5 text-4xl font-extrabold leading-[1.05] tracking-tight md:text-6xl">Embalagens que valorizam seu produto e fortalecem seu negócio.</h1>
-            <p className="mt-6 text-lg text-primary-foreground/80">Soluções em embalagens e suprimentos para hamburguerias, pizzarias, restaurantes, lanchonetes e delivery.</p>
+            <p className="mt-6 text-lg text-primary-foreground/80">Soluções em embalagens para hamburguerias, lanchonetes e delivery em Amparo e região.</p>
             <div className="mt-9 flex flex-wrap gap-3">
               <Link to="/produtos" className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3.5 font-bold text-navy transition hover:brightness-105">Conheça nossos produtos <ArrowRight className="h-4 w-4" /></Link>
-              <Link to="/orcamento" className="rounded-full border border-primary-foreground/40 px-6 py-3.5 font-semibold text-primary-foreground transition hover:bg-primary-foreground/10">Solicite seu orçamento</Link>
+              <Link to="/orcamento" className="rounded-full border border-primary-foreground/40 px-6 py-3.5 font-semibold text-primary-foreground transition hover:bg-primary-foreground/10">Solicitar orçamento</Link>
             </div>
           </div>
         </div>
@@ -53,6 +54,7 @@ function Index() {
                 <span className="text-xs font-bold text-gold">{c.number}</span>
                 <h3 className="mt-1 font-bold text-navy">{c.name}</h3>
                 <p className="mt-1 text-sm text-muted-foreground">{c.description}</p>
+                <span className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-primary">Ver produtos <ArrowRight className="h-4 w-4" /></span>
               </div>
             </Link>
           ))}

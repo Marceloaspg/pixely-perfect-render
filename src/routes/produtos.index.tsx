@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { applications, categories, products } from "@/data/catalog";
+import { applications } from "@/data/catalog";
+import { useCatalog } from "@/lib/catalog-context";
 import { PageHero, ProductCard } from "@/components/site/Layout";
 
 export const Route = createFileRoute("/produtos/")({
@@ -9,7 +10,7 @@ export const Route = createFileRoute("/produtos/")({
   head: () => ({
     meta: [
       { title: "Produtos — Catálogo de embalagens | Majesta Embalagens" },
-      { name: "description", content: "Catálogo de embalagens para delivery: caixas para hambúrguer e pizza, sacos kraft, papel acoplado, lacres, papel térmico e papel toalha interfolha." },
+      { name: "description", content: "Catálogo de embalagens para delivery: caixas para hambúrguer, hot dog e combos, sacos kraft, papéis e lacres." },
       { property: "og:title", content: "Catálogo de embalagens | Majesta Embalagens" },
       { property: "og:description", content: "Pesquise e filtre embalagens por categoria e aplicação." },
     ],
@@ -18,6 +19,7 @@ export const Route = createFileRoute("/produtos/")({
 });
 
 function Catalog() {
+  const { categories, products } = useCatalog();
   const { categoria } = Route.useSearch();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState(categoria ?? "");
