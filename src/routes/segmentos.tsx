@@ -7,9 +7,9 @@ import { PageHero, ProductCard } from "@/components/site/Layout";
 
 export const Route = createFileRoute("/segmentos")({
   head: () => ({
-    meta: [
+    meta: [{ property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" },
       { title: "Soluções por Segmento | Majesta Embalagens" },
-      { name: "description", content: "Embalagens para hamburgueria, pizzaria, marmitaria, restaurantes, lanchonetes, pastelarias, hot-doguerias e delivery." },
+      { name: "description", content: "Embalagens para hamburguerias, lanchonetes, hot-doguerias e delivery em Amparo e região." },
       { property: "og:title", content: "Soluções por Segmento | Majesta Embalagens" },
       { property: "og:description", content: "Encontre as embalagens certas para o seu tipo de negócio." },
     ],

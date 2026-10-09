@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { lovable } from '@/integrations/lovable';
 import { Button } from '@/components/ui/button';
-export const Route=createFileRoute('/auth')({head:()=>({meta:[{title:'Acesso administrativo | Majesta Embalagens'},{name:'description',content:'Entrar na área administrativa da Majesta.'},{property:'og:title',content:'Acesso administrativo | Majesta'},{property:'og:description',content:'Gestão de produtos e contatos.'},{name:'robots',content:'noindex'}]}),component:Auth});
+export const Route=createFileRoute('/auth')({head:()=>({meta:[{property:"og:type",content:"website"},{name:"twitter:card",content:"summary_large_image"},{title:'Acesso administrativo | Majesta Embalagens'},{name:'description',content:'Entrar na área administrativa da Majesta.'},{property:'og:title',content:'Acesso administrativo | Majesta'},{property:'og:description',content:'Gestão de produtos e contatos.'},{name:'robots',content:'noindex'}]}),component:Auth});
 function Auth(){
  const nav=useNavigate();const [email,setEmail]=useState('');const [password,setPassword]=useState('');const [error,setError]=useState('');const [busy,setBusy]=useState(false);
  useEffect(()=>{supabase.auth.getUser().then(({data})=>{if(data.user)nav({to:'/admin'});});},[nav]);

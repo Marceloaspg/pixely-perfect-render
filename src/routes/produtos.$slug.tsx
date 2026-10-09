@@ -14,11 +14,12 @@ export const Route = createFileRoute("/produtos/$slug")({
   },
   head: ({ loaderData }) =>
     loaderData
-      ? { meta: [
+      ? { meta: [{ property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" },
           { title: `${loaderData.product.name} | Majesta Embalagens` },
           { name: "description", content: loaderData.product.description },
           { property: "og:title", content: `${loaderData.product.name} | Majesta Embalagens` },
           { property: "og:description", content: loaderData.product.description },
+          ...(loaderData.product.image.startsWith("https://") ? [{ property: "og:image", content: loaderData.product.image }, { name: "twitter:image", content: loaderData.product.image }] : []),
         ] }
       : { meta: [{ title: "Produto não encontrado" }, { name: "robots", content: "noindex" }] },
   notFoundComponent: () => <div className="py-24 text-center">Produto não encontrado. <Link to="/produtos" className="text-navy underline">Voltar ao catálogo</Link></div>,

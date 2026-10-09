@@ -4,7 +4,7 @@ import { PageHero } from "@/components/site/Layout";
 
 export const Route = createFileRoute("/sobre")({
   head: () => ({
-    meta: [
+    meta: [{ property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" },
       { title: "Sobre Nós | Majesta Embalagens" },
       { name: "description", content: "Conheça a Majesta Embalagens: soluções práticas em embalagens e suprimentos para o setor alimentício." },
       { property: "og:title", content: "Sobre a Majesta Embalagens" },

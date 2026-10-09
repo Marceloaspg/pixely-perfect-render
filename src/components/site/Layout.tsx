@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Menu, X, ClipboardList, Mail, Instagram, Facebook, MessageCircle } from "lucide-react";
 import logo from "@/assets/majesta-logo.png.asset.json";
 import { type Product } from "@/data/catalog";
-import { siteConfig, whatsappLink } from "@/lib/config";
+import { whatsappLink } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import { useCatalog } from "@/lib/catalog-context";
 import { useQuote } from "@/lib/quote";
@@ -73,7 +73,7 @@ export function Footer() {
         <div>
           <h3 className="text-xs font-bold uppercase tracking-widest text-gold">Contato</h3>
           <ul className="mt-4 space-y-3 text-sm text-primary-foreground/75">
-            <li><a href={whatsappLink("Olá, Majesta Embalagens!")} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 hover:text-gold"><MessageCircle className="h-4 w-4" /> WhatsApp</a></li>
+            <li><a href={whatsappLink("Olá, Majesta Embalagens!", siteConfig.whatsapp)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 hover:text-gold"><MessageCircle className="h-4 w-4" /> WhatsApp</a></li>
             {siteConfig.instagram && <li><a href={siteConfig.instagram} className="inline-flex items-center gap-2 hover:text-gold"><Instagram className="h-4 w-4" /> Instagram</a></li>}
             {siteConfig.facebook && <li><a href={siteConfig.facebook} className="inline-flex items-center gap-2 hover:text-gold"><Facebook className="h-4 w-4" /> Facebook</a></li>}
             {siteConfig.email && <li><a href={`mailto:${siteConfig.email}`} className="inline-flex items-center gap-2 hover:text-gold"><Mail className="h-4 w-4" /> {siteConfig.email}</a></li>}

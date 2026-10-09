@@ -11,7 +11,7 @@ import { whatsappLink } from "@/lib/config";
 
 export const Route = createFileRoute("/orcamento")({
   head: () => ({
-    meta: [
+    meta: [{ property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" },
       { title: "Solicitar Orçamento | Majesta Embalagens" },
       { name: "description", content: "Monte sua lista de embalagens e envie o pedido de orçamento pelo WhatsApp." },
       { property: "og:title", content: "Solicitar Orçamento | Majesta Embalagens" },
@@ -28,6 +28,7 @@ function Quote() {
   const { config } = useCatalog();
   const submitQuote = useServerFn(saveQuote);
   const requestKey = useRef("");
+  const requestPayload = useRef("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
@@ -38,7 +39,8 @@ function Quote() {
     const tab = window.open("about:blank", "_blank");
     setBusy(true); setError("");
     try {
-      if(!requestKey.current) requestKey.current = crypto.randomUUID();
+      const payload = JSON.stringify({contact:c,items});
+      if(!requestKey.current || requestPayload.current !== payload) { requestKey.current = crypto.randomUUID(); requestPayload.current = payload; }
       await submitQuote({data:{requestKey:requestKey.current,contact:c,items}});
       const url = whatsappLink(buildQuoteMessage(items,c),config.whatsapp);
       if(!url) throw new Error("WhatsApp ainda não configurado.");
@@ -71,7 +73,7 @@ function Quote() {
           <h2 className="font-bold">Seus dados</h2>
           <div className="mt-4 space-y-3 text-foreground">
             {(["nome", "empresa", "cidade"] as const).map((k) => (
-              <input key={k} value={c[k]} maxLength={100} onChange={(e) => setC({ ...c, [k]: e.target.value })} placeholder={k.charAt(0).toUpperCase() + k.slice(1)} className={field} />
+              <input aria-label={k.charAt(0).toUpperCase() + k.slice(1)} key={k} value={c[k]} maxLength={100} onChange={(e) => setC({ ...c, [k]: e.target.value })} placeholder={k.charAt(0).toUpperCase() + k.slice(1)} className={field} />
             ))}
           </div>
           <Button variant="gold" disabled={!ok || busy} onClick={send} className="mt-5 h-12 w-full">{busy ? "Registrando…" : "Enviar pelo WhatsApp"}</Button>

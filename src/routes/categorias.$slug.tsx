@@ -11,11 +11,12 @@ export const Route = createFileRoute("/categorias/$slug")({
   },
   head: ({ loaderData }) =>
     loaderData
-      ? { meta: [
+      ? { meta: [{ property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" },
           { title: `${loaderData.category.name} | Majesta Embalagens` },
           { name: "description", content: `${loaderData.category.name}: ${loaderData.category.subcategories.join(", ")}. Solicite orçamento.` },
           { property: "og:title", content: `${loaderData.category.name} | Majesta Embalagens` },
           { property: "og:description", content: loaderData.category.description },
+          ...(loaderData.category.image.startsWith("https://") ? [{ property: "og:image", content: loaderData.category.image }, { name: "twitter:image", content: loaderData.category.image }] : []),
         ] }
       : { meta: [{ title: "Categoria não encontrada" }, { name: "robots", content: "noindex" }] },
   notFoundComponent: () => <div className="py-24 text-center">Categoria não encontrada. <Link to="/produtos" className="text-navy underline">Ver catálogo</Link></div>,

@@ -13,3 +13,7 @@
 - Keep public pages in top-level TanStack routes with page-specific metadata so categories and products can be shared separately.
 - Keep quotation message generation in a pure helper and cart state in a shared provider so all catalog surfaces use the same list.
 - Store the uploaded brand asset through Lovable Assets; the favicon is a downscaled local copy for browser compatibility.
+
+- Load persistent catalog and contact data through public server functions and a shared Query provider; this keeps public views consistent and server credentials private.
+- Gate admin pages in the authenticated layout and validate administrator roles in every write function; UI gates alone do not secure catalog changes.
+- Keep product photos in private storage with signed display URLs; this respects the project storage restrictions.

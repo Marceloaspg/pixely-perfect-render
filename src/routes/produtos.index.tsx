@@ -8,7 +8,7 @@ import { PageHero, ProductCard } from "@/components/site/Layout";
 export const Route = createFileRoute("/produtos/")({
   validateSearch: (s: Record<string, unknown>): { categoria?: string } => typeof s['categoria'] === "string" ? { categoria: s['categoria'] } : {},
   head: () => ({
-    meta: [
+    meta: [{ property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" },
       { title: "Produtos — Catálogo de embalagens | Majesta Embalagens" },
       { name: "description", content: "Catálogo de embalagens para delivery: caixas para hambúrguer, hot dog e combos, sacos kraft, papéis e lacres." },
       { property: "og:title", content: "Catálogo de embalagens | Majesta Embalagens" },
@@ -29,7 +29,7 @@ function Catalog() {
     return products
       .filter((p) => (!cat || p.category === cat) && (!app || p.applications.includes(app)) && (!t || `${p.name} ${p.description}`.toLowerCase().includes(t)))
       .sort((a, b) => Number(!!b.featured) - Number(!!a.featured) || a.order - b.order);
-  }, [q, cat, app]);
+  }, [q, cat, app, products]);
 
   return (
     <>
