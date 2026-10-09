@@ -1,7 +1,7 @@
 // Dados de contato oficiais. Preencha com as informações reais da Majesta.
 // WhatsApp: somente dígitos com DDI e DDD. Nunca usar números fictícios.
 export const siteConfig = {
-  whatsapp: "",
+  whatsapp: "5519996145193",
   email: "",
   instagram: "",
   facebook: "",
