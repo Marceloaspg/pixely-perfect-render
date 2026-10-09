@@ -14,16 +14,125 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      catalog_categories: {
+        Row: {
+          active: boolean
+          data: Json
+          slug: string
+        }
+        Insert: {
+          active?: boolean
+          data?: Json
+          slug: string
+        }
+        Update: {
+          active?: boolean
+          data?: Json
+          slug?: string
+        }
+        Relationships: []
+      }
+      catalog_products: {
+        Row: {
+          active: boolean
+          category: string
+          data: Json
+          slug: string
+        }
+        Insert: {
+          active?: boolean
+          category: string
+          data?: Json
+          slug: string
+        }
+        Update: {
+          active?: boolean
+          category?: string
+          data?: Json
+          slug?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_products_category_fkey"
+            columns: ["category"]
+            isOneToOne: false
+            referencedRelation: "catalog_categories"
+            referencedColumns: ["slug"]
+          },
+        ]
+      }
+      contact_settings: {
+        Row: {
+          data: Json
+          id: number
+        }
+        Insert: {
+          data?: Json
+          id?: number
+        }
+        Update: {
+          data?: Json
+          id?: number
+        }
+        Relationships: []
+      }
+      quote_requests: {
+        Row: {
+          contact: Json
+          created_at: string
+          id: string
+          items: Json
+          request_key: string
+        }
+        Insert: {
+          contact: Json
+          created_at?: string
+          id?: string
+          items: Json
+          request_key: string
+        }
+        Update: {
+          contact?: Json
+          created_at?: string
+          id?: string
+          items?: Json
+          request_key?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +259,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin"],
+    },
   },
 } as const

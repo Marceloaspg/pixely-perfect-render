@@ -1,5 +1,13 @@
 {
   "version": "7",
   "dialect": "postgresql",
-  "entries": []
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791584510602,
+      "tag": "0000_majesta_catalog_admin",
+      "breakpoints": true
+    }
+  ]
 }
