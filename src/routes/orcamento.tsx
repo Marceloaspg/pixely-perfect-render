@@ -47,7 +47,7 @@ function Quote() {
           <h2 className="font-bold">Seus dados</h2>
           <div className="mt-4 space-y-3 text-foreground">
             {(["nome", "empresa", "cidade"] as const).map((k) => (
-              <input key={k} value={c[k]} maxLength={100} onChange={(e) => setC({ ...c, [k]: e.target.value })} placeholder={k[0].toUpperCase() + k.slice(1)} className={field} />
+              <input key={k} value={c[k]} maxLength={100} onChange={(e) => setC({ ...c, [k]: e.target.value })} placeholder={k.charAt(0).toUpperCase() + k.slice(1)} className={field} />
             ))}
           </div>
           <a

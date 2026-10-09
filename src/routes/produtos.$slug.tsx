@@ -6,7 +6,9 @@ export const Route = createFileRoute("/produtos/$slug")({
   loader: ({ params }) => {
     const product = getProduct(params.slug);
     if (!product) throw notFound();
-    return { product, category: getCategory(product.category)! };
+    const category = getCategory(product.category);
+    if (!category) throw notFound();
+    return { product, category };
   },
   head: ({ loaderData }) =>
     loaderData

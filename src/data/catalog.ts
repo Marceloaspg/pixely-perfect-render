@@ -68,7 +68,7 @@ export const products: Product[] = seeds.map((s, i) => ({
   ...s,
   order: i,
   demo: true,
-  image: s.image ?? categories.find((c) => c.slug === s.category)!.image,
+  image: s.image ?? categories.find((c) => c.slug === s.category)?.image ?? hero,
 }));
 
 export const getCategory = (slug: string) => categories.find((c) => c.slug === slug);
