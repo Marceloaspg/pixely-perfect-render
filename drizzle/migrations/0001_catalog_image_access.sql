@@ -1,0 +1,4 @@
+CREATE POLICY catalog_photos_read ON storage.objects FOR SELECT TO anon,authenticated USING(bucket_id='catalog-images');
+CREATE POLICY catalog_photos_admin ON storage.objects FOR INSERT TO authenticated WITH CHECK(bucket_id='catalog-images' AND public.has_role(auth.uid(),'admin'));
+CREATE POLICY catalog_photos_admin_update ON storage.objects FOR UPDATE TO authenticated USING(bucket_id='catalog-images' AND public.has_role(auth.uid(),'admin')) WITH CHECK(bucket_id='catalog-images' AND public.has_role(auth.uid(),'admin'));
+CREATE POLICY catalog_photos_admin_delete ON storage.objects FOR DELETE TO authenticated USING(bucket_id='catalog-images' AND public.has_role(auth.uid(),'admin'));
