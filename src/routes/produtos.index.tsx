@@ -5,7 +5,7 @@ import { applications, categories, products } from "@/data/catalog";
 import { PageHero, ProductCard } from "@/components/site/Layout";
 
 export const Route = createFileRoute("/produtos/")({
-  validateSearch: (s: Record<string, unknown>): { categoria?: string } => ({ categoria: typeof s['categoria'] === "string" ? s['categoria'] : undefined }),
+  validateSearch: (s: Record<string, unknown>): { categoria?: string } => typeof s['categoria'] === "string" ? { categoria: s['categoria'] } : {},
   head: () => ({
     meta: [
       { title: "Produtos — Catálogo de embalagens | Majesta Embalagens" },
