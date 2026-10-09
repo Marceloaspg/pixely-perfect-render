@@ -2,8 +2,10 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Menu, X, ClipboardList, Mail, Instagram, Facebook, MessageCircle } from "lucide-react";
 import logo from "@/assets/majesta-logo.png.asset.json";
-import { categories, type Product } from "@/data/catalog";
-import { siteConfig, whatsappLink } from "@/lib/config";
+import { type Product } from "@/data/catalog";
+import { whatsappLink } from "@/lib/config";
+import { Button } from "@/components/ui/button";
+import { useCatalog } from "@/lib/catalog-context";
 import { useQuote } from "@/lib/quote";
 
 const nav = [
@@ -37,7 +39,7 @@ export function Header() {
             <span className="hidden sm:inline">Solicitar orçamento</span>
             {items.length > 0 && <span className="rounded-full bg-gold px-2 text-xs font-bold text-navy">{items.length}</span>}
           </Link>
-          <button aria-label="Menu" onClick={() => setOpen(!open)} className="rounded-md p-2 lg:hidden">{open ? <X /> : <Menu />}</button>
+          <Button variant="ghost" size="icon" aria-label="Menu" onClick={() => setOpen(!open)} className="rounded-md p-2 lg:hidden">{open ? <X /> : <Menu />}</Button>
         </div>
       </div>
       {open && (
@@ -52,6 +54,7 @@ export function Header() {
 }
 
 export function Footer() {
+  const { categories, config: siteConfig } = useCatalog();
   return (
     <footer className="bg-gradient-navy text-primary-foreground">
       <div className="mx-auto grid max-w-7xl gap-10 px-5 py-14 md:grid-cols-4">
@@ -70,10 +73,11 @@ export function Footer() {
         <div>
           <h3 className="text-xs font-bold uppercase tracking-widest text-gold">Contato</h3>
           <ul className="mt-4 space-y-3 text-sm text-primary-foreground/75">
-            <li><a href={whatsappLink("Olá, Majesta Embalagens!")} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 hover:text-gold"><MessageCircle className="h-4 w-4" /> WhatsApp</a></li>
+            <li><a href={whatsappLink("Olá, Majesta Embalagens!", siteConfig.whatsapp)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 hover:text-gold"><MessageCircle className="h-4 w-4" /> WhatsApp</a></li>
             {siteConfig.instagram && <li><a href={siteConfig.instagram} className="inline-flex items-center gap-2 hover:text-gold"><Instagram className="h-4 w-4" /> Instagram</a></li>}
             {siteConfig.facebook && <li><a href={siteConfig.facebook} className="inline-flex items-center gap-2 hover:text-gold"><Facebook className="h-4 w-4" /> Facebook</a></li>}
             {siteConfig.email && <li><a href={`mailto:${siteConfig.email}`} className="inline-flex items-center gap-2 hover:text-gold"><Mail className="h-4 w-4" /> {siteConfig.email}</a></li>}
+            <li><Link to="/admin" className="hover:text-gold">Área administrativa</Link></li>
             <li><Link to="/privacidade" className="hover:text-gold">Política de Privacidade</Link></li>
           </ul>
         </div>
@@ -104,14 +108,14 @@ export function ProductCard({ p }: { p: Product }) {
     <article className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-card transition hover:-translate-y-1">
       <Link to="/produtos/$slug" params={{ slug: p.slug }} className="relative block aspect-[5/4] overflow-hidden bg-muted">
         <img src={p.image} alt={p.name} loading="lazy" width={912} height={736} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
-        <span className="absolute left-3 top-3 rounded-full bg-background/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Exemplo</span>
+        {p.demo && <span className="absolute left-3 top-3 rounded-full bg-background/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Exemplo</span>}
       </Link>
       <div className="flex flex-1 flex-col p-5">
         <Link to="/produtos/$slug" params={{ slug: p.slug }} className="font-bold text-navy hover:underline">{p.name}</Link>
         <p className="mt-1 flex-1 text-sm text-muted-foreground">{p.description}</p>
-        <button onClick={() => add(p.slug, p.name)} disabled={inList} className="mt-4 rounded-full border border-primary px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground disabled:border-gold disabled:bg-gold/15 disabled:text-navy">
+        <Button variant="quote" onClick={() => add(p.slug, p.name)} disabled={inList} className="mt-4 rounded-full border border-primary px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground disabled:border-gold disabled:bg-gold/15 disabled:text-navy">
           {inList ? "✓ Na lista de orçamento" : "Solicitar cotação"}
-        </button>
+        </Button>
       </div>
     </article>
   );

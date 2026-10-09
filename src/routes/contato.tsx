@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { MessageCircle, Mail, Instagram, Facebook } from "lucide-react";
+import { useCatalog } from "@/lib/catalog-context";
 import { PageHero } from "@/components/site/Layout";
-import { siteConfig, whatsappLink } from "@/lib/config";
+import { whatsappLink } from "@/lib/config";
 
 export const Route = createFileRoute("/contato")({
   head: () => ({
-    meta: [
+    meta: [{ property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" },
       { title: "Contato | Majesta Embalagens" },
       { name: "description", content: "Fale com a Majesta Embalagens pelo WhatsApp, e-mail ou redes sociais." },
       { property: "og:title", content: "Contato | Majesta Embalagens" },
@@ -16,8 +17,9 @@ export const Route = createFileRoute("/contato")({
 });
 
 function Contact() {
+  const { config: siteConfig } = useCatalog();
   const cards = [
-    { icon: MessageCircle, label: "WhatsApp", value: "Iniciar conversa", href: whatsappLink("Olá, Majesta Embalagens!") },
+    { icon: MessageCircle, label: "WhatsApp", value: "Iniciar conversa", href: whatsappLink("Olá, Majesta Embalagens!", siteConfig.whatsapp) },
     siteConfig.email && { icon: Mail, label: "E-mail comercial", value: siteConfig.email, href: `mailto:${siteConfig.email}` },
     siteConfig.instagram && { icon: Instagram, label: "Instagram", value: "Seguir", href: siteConfig.instagram },
     siteConfig.facebook && { icon: Facebook, label: "Facebook", value: "Curtir", href: siteConfig.facebook },

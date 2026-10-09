@@ -1,20 +1,22 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { getCategory, products } from "@/data/catalog";
+import { catalogQuery, useCatalog } from "@/lib/catalog-context";
 import { PageHero, ProductCard } from "@/components/site/Layout";
 
 export const Route = createFileRoute("/categorias/$slug")({
-  loader: ({ params }) => {
-    const category = getCategory(params.slug);
+  loader: async ({ params, context }) => {
+    const catalog = await context.queryClient.ensureQueryData(catalogQuery);
+    const category = catalog.categories.find(c => c.slug === params.slug);
     if (!category) throw notFound();
     return { category };
   },
   head: ({ loaderData }) =>
     loaderData
-      ? { meta: [
+      ? { meta: [{ property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" },
           { title: `${loaderData.category.name} | Majesta Embalagens` },
           { name: "description", content: `${loaderData.category.name}: ${loaderData.category.subcategories.join(", ")}. Solicite orçamento.` },
           { property: "og:title", content: `${loaderData.category.name} | Majesta Embalagens` },
           { property: "og:description", content: loaderData.category.description },
+          ...(loaderData.category.image.startsWith("https://") ? [{ property: "og:image", content: loaderData.category.image }, { name: "twitter:image", content: loaderData.category.image }] : []),
         ] }
       : { meta: [{ title: "Categoria não encontrada" }, { name: "robots", content: "noindex" }] },
   notFoundComponent: () => <div className="py-24 text-center">Categoria não encontrada. <Link to="/produtos" className="text-navy underline">Ver catálogo</Link></div>,
@@ -23,6 +25,7 @@ export const Route = createFileRoute("/categorias/$slug")({
 
 function CategoryPage() {
   const { category: c } = Route.useLoaderData();
+  const { products } = useCatalog();
   const list = products.filter((p) => p.category === c.slug);
   return (
     <>

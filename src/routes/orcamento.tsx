@@ -1,13 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Trash2 } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { saveQuote } from "@/lib/catalog.functions";
+import { useCatalog } from "@/lib/catalog-context";
+import { Button } from "@/components/ui/button";
 import { PageHero } from "@/components/site/Layout";
 import { buildQuoteMessage, useQuote } from "@/lib/quote";
 import { whatsappLink } from "@/lib/config";
 
 export const Route = createFileRoute("/orcamento")({
   head: () => ({
-    meta: [
+    meta: [{ property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" },
       { title: "Solicitar Orçamento | Majesta Embalagens" },
       { name: "description", content: "Monte sua lista de embalagens e envie o pedido de orçamento pelo WhatsApp." },
       { property: "og:title", content: "Solicitar Orçamento | Majesta Embalagens" },
@@ -21,8 +25,30 @@ const field = "h-11 w-full rounded-xl border border-input bg-background px-3 out
 
 function Quote() {
   const { items, remove, setQty } = useQuote();
+  const { config } = useCatalog();
+  const submitQuote = useServerFn(saveQuote);
+  const requestKey = useRef("");
+  const requestPayload = useRef("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [sent, setSent] = useState(false);
   const [c, setC] = useState({ nome: "", empresa: "", cidade: "" });
-  const ok = items.length > 0 && c.nome && c.empresa && c.cidade;
+  const ok = items.length > 0 && items.every(i => i.quantity.trim()) && c.nome.trim() && c.empresa.trim() && c.cidade.trim();
+  async function send() {
+    if (!ok) return;
+    const tab = window.open("about:blank", "_blank");
+    setBusy(true); setError("");
+    try {
+      const payload = JSON.stringify({contact:c,items});
+      if(!requestKey.current || requestPayload.current !== payload) { requestKey.current = crypto.randomUUID(); requestPayload.current = payload; }
+      await submitQuote({data:{requestKey:requestKey.current,contact:c,items}});
+      const url = whatsappLink(buildQuoteMessage(items,c),config.whatsapp);
+      if(!url) throw new Error("WhatsApp ainda não configurado.");
+      if(tab) tab.location.href=url; else window.location.href=url;
+      setSent(true);
+    } catch(e) { tab?.close(); setError(e instanceof Error ? e.message : "Não foi possível enviar."); }
+    finally {setBusy(false);}
+  }
   return (
     <>
       <PageHero eyebrow="Orçamento" title="Sua lista de orçamento" text="Informe as quantidades, preencha seus dados e envie a lista completa pelo WhatsApp." />
@@ -36,8 +62,8 @@ function Quote() {
               {items.map((i) => (
                 <li key={i.slug} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_200px_auto]">
                   <span className="min-w-0 truncate font-medium">{i.name}</span>
-                  <input value={i.quantity} onChange={(e) => setQty(i.slug, e.target.value)} placeholder="Ex.: 500 unidades" className={`${field} col-span-2 sm:col-span-1`} />
-                  <button aria-label="Remover" onClick={() => remove(i.slug)} className="row-start-1 col-start-2 rounded-lg p-2 text-muted-foreground hover:text-destructive sm:col-start-3"><Trash2 className="h-4 w-4" /></button>
+                  <input aria-label={`Quantidade de ${i.name}`} maxLength={100} value={i.quantity} onChange={(e) => setQty(i.slug, e.target.value)} placeholder="Ex.: 500 unidades" className={`${field} col-span-2 sm:col-span-1`} />
+                  <Button variant="ghost" size="icon" aria-label="Remover" onClick={() => remove(i.slug)} className="row-start-1 col-start-2 rounded-lg p-2 text-muted-foreground hover:text-destructive sm:col-start-3"><Trash2 className="h-4 w-4" /></Button>
                 </li>
               ))}
             </ul>
@@ -47,14 +73,12 @@ function Quote() {
           <h2 className="font-bold">Seus dados</h2>
           <div className="mt-4 space-y-3 text-foreground">
             {(["nome", "empresa", "cidade"] as const).map((k) => (
-              <input key={k} value={c[k]} maxLength={100} onChange={(e) => setC({ ...c, [k]: e.target.value })} placeholder={k.charAt(0).toUpperCase() + k.slice(1)} className={field} />
+              <input aria-label={k.charAt(0).toUpperCase() + k.slice(1)} key={k} value={c[k]} maxLength={100} onChange={(e) => setC({ ...c, [k]: e.target.value })} placeholder={k.charAt(0).toUpperCase() + k.slice(1)} className={field} />
             ))}
           </div>
-          <a
-            href={ok ? whatsappLink(buildQuoteMessage(items, c)) : undefined}
-            target="_blank" rel="noreferrer" aria-disabled={!ok}
-            className={`mt-5 block rounded-full px-6 py-3.5 text-center font-bold ${ok ? "bg-gold text-navy hover:brightness-105" : "pointer-events-none bg-primary-foreground/15 text-primary-foreground/50"}`}
-          >Enviar pelo WhatsApp</a>
+          <Button variant="gold" disabled={!ok || busy} onClick={send} className="mt-5 h-12 w-full">{busy ? "Registrando…" : "Enviar pelo WhatsApp"}</Button>
+          {error && <p role="alert" className="mt-3 text-sm">{error}</p>}
+          {sent && <p className="mt-3 text-sm">Solicitação registrada. Conclua o envio no WhatsApp.</p>}
           <p className="mt-3 text-xs text-primary-foreground/60">Nenhum pagamento é feito pelo site. A Majesta retornará com a cotação.</p>
         </div>
       </section>

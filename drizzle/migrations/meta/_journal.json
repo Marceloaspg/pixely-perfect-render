@@ -1,5 +1,20 @@
 {
   "version": "7",
   "dialect": "postgresql",
-  "entries": []
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791584510602,
+      "tag": "0000_majesta_catalog_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791584599878,
+      "tag": "0001_catalog_image_access",
+      "breakpoints": true
+    }
+  ]
 }

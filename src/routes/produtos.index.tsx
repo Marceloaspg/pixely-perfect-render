@@ -1,15 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { applications, categories, products } from "@/data/catalog";
+import { applications } from "@/data/catalog";
+import { useCatalog } from "@/lib/catalog-context";
 import { PageHero, ProductCard } from "@/components/site/Layout";
 
 export const Route = createFileRoute("/produtos/")({
-  validateSearch: (s: Record<string, unknown>): { categoria?: string } => ({ categoria: typeof s['categoria'] === "string" ? s['categoria'] : undefined }),
+  validateSearch: (s: Record<string, unknown>): { categoria?: string } => typeof s['categoria'] === "string" ? { categoria: s['categoria'] } : {},
   head: () => ({
-    meta: [
+    meta: [{ property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" },
       { title: "Produtos — Catálogo de embalagens | Majesta Embalagens" },
-      { name: "description", content: "Catálogo de embalagens para delivery: caixas para hambúrguer e pizza, sacos kraft, papel acoplado, lacres, papel térmico e papel toalha interfolha." },
+      { name: "description", content: "Catálogo de embalagens para delivery: caixas para hambúrguer, hot dog e combos, sacos kraft, papéis e lacres." },
       { property: "og:title", content: "Catálogo de embalagens | Majesta Embalagens" },
       { property: "og:description", content: "Pesquise e filtre embalagens por categoria e aplicação." },
     ],
@@ -18,6 +19,7 @@ export const Route = createFileRoute("/produtos/")({
 });
 
 function Catalog() {
+  const { categories, products } = useCatalog();
   const { categoria } = Route.useSearch();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState(categoria ?? "");
@@ -27,7 +29,7 @@ function Catalog() {
     return products
       .filter((p) => (!cat || p.category === cat) && (!app || p.applications.includes(app)) && (!t || `${p.name} ${p.description}`.toLowerCase().includes(t)))
       .sort((a, b) => Number(!!b.featured) - Number(!!a.featured) || a.order - b.order);
-  }, [q, cat, app]);
+  }, [q, cat, app, products]);
 
   return (
     <>
