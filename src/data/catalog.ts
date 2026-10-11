@@ -41,10 +41,12 @@ export const productDataSchema = z.object({
   featured: z.boolean().default(false),
   order: z.number().int().min(0).max(9999).default(0),
   demo: z.boolean().default(false),
-  imagePath: z.string().max(300).default('')
+  imagePath: z.string().max(300).default(''),
+  additionalImagePaths: z.array(z.string().min(1).max(300)).max(5).default([])
+    .refine(paths => new Set(paths).size === paths.length, 'A galeria não pode conter caminhos repetidos.'),
 });
 export type Category = z.infer<typeof categoryDataSchema> & {slug:string;image:string;active:boolean};
-export type Product = z.infer<typeof productDataSchema> & {slug:string;category:string;image:string;active:boolean};
+export type Product = z.infer<typeof productDataSchema> & {slug:string;category:string;image:string;additionalImages:string[];active:boolean};
 export const contactSchema = z.object({whatsapp:z.string().regex(/^\d{10,15}$/),email:z.union([z.string().email(),z.literal('')]),instagram:z.union([z.string().url(),z.literal('')]),facebook:z.union([z.string().url(),z.literal('')])});
 export type SiteConfig = z.infer<typeof contactSchema>;
 export type CatalogData = { categories:Category[];products:Product[];config:SiteConfig };
@@ -58,9 +60,7 @@ export function slugify(text: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 120);
 }
-export function assertAdminRole(result: { data: boolean | null; error: unknown }): void {
-  if (result.error || result.data !== true) throw new Error('Acesso restrito a administradores.');
-}
+export { assertAdminRole } from '@/lib/admin-access';
 export function sortCategories(categories: Category[]): Category[] {
   const orderOf = (category: Category) => category.order ?? Math.max(0, (Number(category.number) || 1) - 1);
   return [...categories].sort((a,b)=>

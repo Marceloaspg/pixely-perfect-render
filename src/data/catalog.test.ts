@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { allowedCategories, assertAdminRole, categoryDataSchema, categorySlugSchema, filterPublicCatalog, segments, productDataSchema, slugify, sortCategories } from './catalog';
+import { AdminPermissionDeniedError, AdminRoleCheckError } from '@/lib/admin-access';
 
 it('exposes exactly the seven requested categories',()=>{expect([...allowedCategories]).toEqual(['embalagens-para-hamburguer','sacos-kraft-e-sacolas','papeis-para-alimentos','embalagens-para-batatas-e-porcoes','embalagens-para-hot-dog','embalagens-para-combos','etiquetas-e-lacres-de-seguranca']);});
 it('never relates segments to removed categories',()=>{for(const segment of segments)for(const category of segment.categories)expect(allowedCategories).toContain(category);});
@@ -81,9 +82,9 @@ it('excludes inactive categories and their products from every public catalog su
     { ...categoryDataSchema.parse({ name: 'Inativa', number: '02' }), slug: 'inativa', image: '', active: false },
   ];
   const products = [
-    { ...productDataSchema.parse({ name: 'Produto ativo', description: '' }), slug: 'produto-ativo', category: 'ativa', image: '', active: true },
-    { ...productDataSchema.parse({ name: 'Produto desligado', description: '' }), slug: 'produto-desligado', category: 'ativa', image: '', active: false },
-    { ...productDataSchema.parse({ name: 'Produto de categoria inativa', description: '' }), slug: 'produto-categoria-inativa', category: 'inativa', image: '', active: true },
+    { ...productDataSchema.parse({ name: 'Produto ativo', description: '' }), slug: 'produto-ativo', category: 'ativa', image: '', additionalImages: [], active: true },
+    { ...productDataSchema.parse({ name: 'Produto desligado', description: '' }), slug: 'produto-desligado', category: 'ativa', image: '', additionalImages: [], active: false },
+    { ...productDataSchema.parse({ name: 'Produto de categoria inativa', description: '' }), slug: 'produto-categoria-inativa', category: 'inativa', image: '', additionalImages: [], active: true },
   ];
   const publicCatalog = filterPublicCatalog(categories, products);
   expect(publicCatalog.categories.map(category => category.slug)).toEqual(['ativa']);
@@ -91,7 +92,7 @@ it('excludes inactive categories and their products from every public catalog su
 });
 
 it('rejects writes when the server role check errors or is not an administrator', () => {
-  expect(() => assertAdminRole({ data: false, error: null })).toThrow('Acesso restrito');
-  expect(() => assertAdminRole({ data: true, error: new Error('role lookup failed') })).toThrow('Acesso restrito');
+  expect(() => assertAdminRole({ data: false, error: null })).toThrow(AdminPermissionDeniedError);
+  expect(() => assertAdminRole({ data: true, error: new Error('role lookup failed') })).toThrow(AdminRoleCheckError);
   expect(() => assertAdminRole({ data: true, error: null })).not.toThrow();
 });

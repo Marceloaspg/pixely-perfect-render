@@ -1,27 +1,44 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate, useRouter, type ErrorComponentProps } from '@tanstack/react-router';
 import { useRef, useState } from 'react';
 import { queryOptions, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { getAdminCatalog, reorderCatalogCategories, saveCatalogItem } from '@/lib/catalog.functions';
+import { getAdminCatalog, getUnreferencedImageReport, removeUnreferencedCatalogImages, reorderCatalogCategories, saveCatalogItem, uploadCatalogImage } from '@/lib/catalog.functions';
 import { categoryDataSchema, categorySlugSchema, imageMap, productDataSchema, contactSchema, slugify, sortCategories, type Product, type Category, type SiteConfig } from '@/data/catalog';
+import { addAdditionalImage, MAX_ADDITIONAL_IMAGES, removeImageAssociation, reorderAdditionalImages, selectMainImage } from '@/lib/product-images';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Plus, LogOut, Pencil, Upload, Save, Search, Image as ImageIcon, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
+import { ImageCropDialog } from '@/components/admin/ImageCropDialog';
+import { getAdminRouteErrorKind, getAdminRouteErrorMessage } from '@/lib/admin-access';
 
 const adminQuery=queryOptions({queryKey:['admin-catalog'],queryFn:()=>getAdminCatalog()});
 
 export const Route=createFileRoute('/_authenticated/admin')({
   loader:({context})=>context.queryClient.ensureQueryData(adminQuery),
   head:()=>({meta:[{property:"og:type",content:"website"},{name:"twitter:card",content:"summary_large_image"},{title:'Painel administrativo | Majesta Embalagens'},{name:'description',content:'Gerenciamento de produtos, categorias e contato.'},{property:'og:title',content:'Painel administrativo | Majesta'},{property:'og:description',content:'Administração do catálogo.'},{name:'robots',content:'noindex'}]}),
-  errorComponent:()=> (
-    <section className="mx-auto max-w-xl px-5 py-16">
-      <h1 className="text-2xl font-bold">Acesso restrito</h1>
-      <p className="mt-4">Sua conta precisa de permissão administrativa para acessar o catálogo.</p>
-      <Button onClick={async()=>{await supabase.auth.signOut();window.location.href='/auth';}} className="mt-4">Sair</Button>
-    </section>
-  ),
+  errorComponent: AdminRouteError,
   component:Admin
 });
+
+function AdminRouteError({ error, reset }: ErrorComponentProps) {
+  const router = useRouter();
+  const kind = getAdminRouteErrorKind(error);
+
+  return (
+    <section className="mx-auto max-w-xl px-5 py-16">
+      <h1 className="text-2xl font-bold">
+        {kind === 'permission' ? 'Acesso restrito' : kind === 'authentication' ? 'Sessão necessária' : 'Painel indisponível'}
+      </h1>
+      <p className="mt-4">{getAdminRouteErrorMessage(error)}</p>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <Button onClick={() => { void router.invalidate().then(reset, reset); }}>Tentar novamente</Button>
+        {kind === 'authentication' && (
+          <Button variant="outline" onClick={() => { window.location.href = '/auth'; }}>Ir para entrar</Button>
+        )}
+      </div>
+    </section>
+  );
+}
 
 function Admin(){
  const {data}=useSuspenseQuery(adminQuery);
@@ -29,6 +46,9 @@ function Admin(){
  const nav=useNavigate();
  const save=useServerFn(saveCatalogItem);
  const saveOrder=useServerFn(reorderCatalogCategories);
+ const uploadImage=useServerFn(uploadCatalogImage);
+ const getImageReport=useServerFn(getUnreferencedImageReport);
+ const removeImages=useServerFn(removeUnreferencedCatalogImages);
 
  const [tab,setTab]=useState('Produtos');
  const [edit,setEdit]=useState<Product|Category|null>(null);
@@ -38,7 +58,11 @@ function Admin(){
  const [busy,setBusy]=useState(false);
  const [previewUrl,setPreviewUrl]=useState<string>('');
  const [categorySlugEdited,setCategorySlugEdited]=useState(false);
- const pendingCategoryUploads=useRef(new Set<string>());
+ const [cropFile,setCropFile]=useState<File|null>(null);
+ const [cropTarget,setCropTarget]=useState<'main'|'additional'>('main');
+ const [additionalImagePreviews,setAdditionalImagePreviews]=useState<Record<string,string>>({});
+ const [orphanReport,setOrphanReport]=useState<string[]|null>(null);
+ const pendingImageUploads=useRef(new Set<string>());
 
  // Filtros da listagem de produtos
  const [searchQuery,setSearchQuery]=useState('');
@@ -72,13 +96,86 @@ function Admin(){
    if(url.startsWith('blob:')) URL.revokeObjectURL(url);
  }
 
- async function removePendingCategoryUploads(keepPath=''):Promise<string|undefined> {
-   const paths=[...pendingCategoryUploads.current].filter(path=>path!==keepPath);
+ function revokeImagePreviews() {
+   for(const url of Object.values(additionalImagePreviews))if(url.startsWith('blob:'))URL.revokeObjectURL(url);
+   setAdditionalImagePreviews({});
+ }
+
+ async function fileToBase64(file:File):Promise<string> {
+   return new Promise((resolve,reject)=>{
+     const reader=new FileReader();
+     reader.onload=()=>resolve(String(reader.result).split(',')[1]??'');
+     reader.onerror=()=>reject(reader.error??new Error('Não foi possível ler a imagem processada.'));
+     reader.readAsDataURL(file);
+   });
+ }
+
+ async function uploadProcessedImage(file:File) {
+   setBusy(true);
+   setMessage('Enviando imagem otimizada...');
+   try{
+     const result=await uploadImage({data:{contentType:file.type as 'image/jpeg'|'image/png'|'image/webp',base64:await fileToBase64(file)}});
+     const preview=URL.createObjectURL(file);
+     pendingImageUploads.current.add(result.path);
+     setEdit(current=>{
+       if(!current)return current;
+       if(kind==='category') {
+         return {...current,imagePath:result.path};
+       }
+       if(!('category' in current))return current;
+       if(cropTarget==='main'){
+         const additionalImagePaths=current.additionalImagePaths??[];
+         const preservedMain=current.imagePath&&additionalImagePaths.length<MAX_ADDITIONAL_IMAGES
+           ?[...additionalImagePaths,current.imagePath]
+           :additionalImagePaths;
+         return {...current,imagePath:result.path,additionalImagePaths:preservedMain};
+       }
+       return {...current,...addAdditionalImage(current,result.path)};
+     });
+     if(kind==='product'&&cropTarget==='additional'){
+       setAdditionalImagePreviews(current=>({...current,[result.path]:preview}));
+     }else{
+       revokePreview();
+       setPreviewUrl(preview);
+     }
+     setMessage('Imagem enviada. Salve as alterações para associá-la ao cadastro.');
+   }catch(error){
+     setMessage(error instanceof Error?error.message:'Não foi possível enviar a imagem.');
+   }finally{
+     setBusy(false);
+   }
+ }
+
+ function openCrop(file:File|undefined,target:'main'|'additional'='main') {
+   if(!file)return;
+   setMessage('');
+   if(file.size>5*1024*1024||!['image/jpeg','image/png','image/webp'].includes(file.type)){
+     setMessage('Use JPG, PNG ou WebP de até 5 MB.');
+     return;
+   }
+   if(target==='additional'&&edit&&'category' in edit&&edit.additionalImagePaths.length>=MAX_ADDITIONAL_IMAGES){
+     setMessage('Cada produto pode ter até cinco fotografias adicionais.');
+     return;
+   }
+   if(target==='main'&&edit&&'category' in edit&&edit.imagePath&&edit.additionalImagePaths.length>=MAX_ADDITIONAL_IMAGES){
+     setMessage('Remova uma fotografia adicional antes de substituir a principal para preservar a imagem atual.');
+     return;
+   }
+   setCropTarget(target);
+   setCropFile(file);
+ }
+
+ function clearEditorPreviews() {
+   revokePreview();
+   revokeImagePreviews();
+ }
+
+ async function removePendingUploads():Promise<string|undefined> {
+   const paths=[...pendingImageUploads.current];
    if(paths.length===0)return undefined;
    try{
-     const result=await supabase.storage.from('catalog-images').remove(paths);
-     if(result.error)return result.error.message;
-     for(const path of paths)pendingCategoryUploads.current.delete(path);
+     await removeImages({data:{paths}});
+     for(const path of paths)pendingImageUploads.current.delete(path);
      return undefined;
    }catch(error){
      return error instanceof Error?error.message:'erro inesperado';
@@ -87,14 +184,14 @@ function Admin(){
 
  async function cancelEditor() {
    setBusy(true);
-   const shouldRemoveCategoryUploads=kind==='category'&&!!categoryEdit&&!isExistingCategory;
+   const shouldRemovePendingUploads=!!edit;
    let cleanupError:string|undefined;
    try{
-     if(shouldRemoveCategoryUploads)cleanupError=await removePendingCategoryUploads();
+     if(shouldRemovePendingUploads)cleanupError=await removePendingUploads();
    }catch(error){
      cleanupError=error instanceof Error?error.message:'erro inesperado';
    }finally{
-     revokePreview();
+     clearEditorPreviews();
      setEdit(null);
      setPreviewUrl('');
      setCategorySlugEdited(false);
@@ -139,53 +236,16 @@ function Admin(){
     });
    }
    await refresh();
-   const isNewCategory=kind==='category'&&categoryEdit&&!isExistingCategory;
-   const savedCategoryImage=isNewCategory?categoryEdit.imagePath:'';
-   const cleanupError=isNewCategory?await removePendingCategoryUploads(savedCategoryImage):undefined;
-   if(savedCategoryImage)pendingCategoryUploads.current.delete(savedCategoryImage);
-   revokePreview();
+   pendingImageUploads.current.clear();
+   clearEditorPreviews();
    setEdit(null);
    setPreviewUrl('');
    setCategorySlugEdited(false);
-   setMessage(cleanupError
-     ?`Alterações salvas, mas não foi possível remover uma fotografia temporária: ${cleanupError}`
-     :'Alterações salvas com sucesso.');
+   setMessage('Alterações salvas com sucesso.');
   }catch(e){
     setMessage(e instanceof Error ? e.message : 'Não foi possível salvar.');
   }finally{
     setBusy(false);
-  }
- }
-
- async function upload(file:File|undefined){
-  if(!file||!edit) return;
-  if(file.size > 5*1024*1024 || !['image/jpeg','image/png','image/webp'].includes(file.type)){
-    setMessage('Use JPG, PNG ou WebP de até 5 MB.');
-    return;
-  }
-  setBusy(true);
-  setMessage('Enviando fotografia...');
-  const localUrl = URL.createObjectURL(file);
-  revokePreview();
-  setPreviewUrl(localUrl);
-
-  const path=`${crypto.randomUUID()}.${file.type.split('/')[1]}`;
-  try{
-   const r=await supabase.storage.from('catalog-images').upload(path,file);
-   if(r.error){
-    const isMissingBucket = r.error.message.includes('not found') || r.error.message.includes('NoSuchBucket');
-    setMessage(isMissingBucket
-      ? 'Bucket "catalog-images" não encontrado no Supabase Storage. Crie o bucket para habilitar o envio de fotos.'
-      : `Não foi possível enviar a foto: ${r.error.message}`);
-   }else{
-    setEdit(current=>current?{...current,imagePath:path}:current);
-    if(kind==='category'&&categoryEdit&&!isExistingCategory)pendingCategoryUploads.current.add(path);
-    setMessage('Fotografia enviada com sucesso.');
-   }
-  }catch(error){
-   setMessage(`Não foi possível enviar a foto: ${error instanceof Error?error.message:'erro inesperado'}`);
-  }finally{
-   setBusy(false);
   }
  }
 
@@ -194,26 +254,32 @@ function Admin(){
  }
 
  function startEditProduct(p: Product) {
+   clearEditorPreviews();
    setKind('product');
    setEdit(p);
    setPreviewUrl(p.image || '');
+   setAdditionalImagePreviews(Object.fromEntries(p.additionalImagePaths.map((path,index)=>[path,p.additionalImages[index]??''])));
    setMessage('');
  }
 
  function startNewProduct() {
+   clearEditorPreviews();
    setKind('product');
    setEdit({
      slug:'',
      category:cats[0]?.slug??'',
      ...productDataSchema.parse({name:'Novo produto',description:''}),
      image:'',
+     additionalImages:[],
      active:false
    });
    setPreviewUrl('');
+   setAdditionalImagePreviews({});
    setMessage('');
  }
 
  function startNewCategory() {
+   clearEditorPreviews();
    setKind('category');
    setCategorySlugEdited(false);
    setEdit({
@@ -229,6 +295,7 @@ function Admin(){
      active:false,
    });
    setPreviewUrl('');
+   setAdditionalImagePreviews({});
    setMessage('');
  }
 
@@ -262,6 +329,48 @@ function Admin(){
    const subcategories=[...categoryEdit.subcategories];
    [subcategories[index],subcategories[target]]=[subcategories[target]!,subcategories[index]!];
    setEdit({...categoryEdit,subcategories});
+ }
+
+ async function generateImageReport() {
+   setBusy(true);
+   setMessage('');
+   try{
+     const report=await getImageReport();
+     setOrphanReport(report.paths);
+     setMessage(`Relatório concluído: ${report.paths.length} arquivo(s) sem referência encontrada. Nenhum arquivo foi removido.`);
+   }catch(error){
+     setMessage(error instanceof Error?error.message:'Não foi possível gerar o relatório de imagens.');
+   }finally{
+     setBusy(false);
+   }
+ }
+
+ function promoteAdditionalImage(path:string) {
+   if(!edit||!('category' in edit))return;
+   const currentMainPath=edit.imagePath;
+   const currentMainUrl=previewUrl||edit.image;
+   const selectedUrl=additionalImagePreviews[path]??'';
+   const next=selectMainImage(edit,path);
+   setEdit({...edit,...next});
+   setPreviewUrl(selectedUrl);
+   setAdditionalImagePreviews(current=>({...current,[currentMainPath]:currentMainUrl,[path]:selectedUrl}));
+ }
+
+ function removeAdditionalImage(path:string) {
+   if(!edit||!('category' in edit))return;
+   setEdit({...edit,...removeImageAssociation(edit,path)});
+   const imageUrl=additionalImagePreviews[path];
+   if(imageUrl?.startsWith('blob:'))URL.revokeObjectURL(imageUrl);
+   setAdditionalImagePreviews(current=>{
+     const next={...current};
+     delete next[path];
+     return next;
+   });
+ }
+
+ function moveAdditionalImage(from:number,to:number) {
+   if(!edit||!('category' in edit))return;
+   setEdit({...edit,...reorderAdditionalImages(edit,from,to)});
  }
 
  const currentDimensions = (edit && 'dimensions' in edit && edit.dimensions) ? edit.dimensions : { length: '', width: '', height: '', unit: 'cm' };
@@ -299,8 +408,15 @@ function Admin(){
           <Button onClick={startNewProduct} className="rounded-full bg-primary font-semibold text-primary-foreground hover:bg-navy-soft">
             <Plus className="h-4 w-4 mr-2" />Novo produto
           </Button>
-          <span className="text-sm text-muted-foreground">{filteredProducts.length} de {data.catalog.products.length} produto(s)</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="outline" disabled={busy} onClick={generateImageReport}>Relatório de imagens não referenciadas</Button>
+            <span className="text-sm text-muted-foreground">{filteredProducts.length} de {data.catalog.products.length} produto(s)</span>
+          </div>
         </div>
+        {orphanReport&&<div className="mt-3 rounded-xl border border-border bg-muted/40 p-4 text-sm">
+          <p className="font-semibold">Possíveis arquivos sem referência (somente relatório; nenhum arquivo foi excluído)</p>
+          {orphanReport.length===0?<p className="mt-2 text-muted-foreground">Nenhum candidato encontrado.</p>:<ul className="mt-2 max-h-48 space-y-1 overflow-auto font-mono text-xs">{orphanReport.map(path=><li key={path}>{path}</li>)}</ul>}
+        </div>}
 
         {/* BARRA DE FILTROS */}
         <div className="mt-5 grid gap-3 rounded-2xl border border-border bg-card p-4 shadow-card sm:grid-cols-[1fr_auto_auto]">
@@ -741,9 +857,9 @@ function Admin(){
           </div>
         </section>
 
-        {/* SEÇÃO 5: FOTOGRAFIA PRINCIPAL E PRÉ-VISUALIZAÇÃO 4:3 */}
+        {/* SEÇÃO 5: FOTOGRAFIAS */}
         <section className="space-y-4 border-t border-border pt-6">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-gold">5. Fotografia Principal</h3>
+          <h3 className="text-sm font-bold uppercase tracking-wider text-gold">{kind==='category'?'Fotografia Principal da Categoria':'Fotografias do Produto'}</h3>
           <div className="grid gap-6 sm:grid-cols-[220px_1fr] items-start">
             <div className="space-y-2">
               <span className="text-xs font-semibold text-muted-foreground block">Pré-visualização (4:3)</span>
@@ -766,22 +882,24 @@ function Admin(){
 
             <div className="space-y-3">
               <label className="block">
-                <span className="text-sm font-semibold block mb-1">Selecionar arquivo de foto</span>
+                <span className="text-sm font-semibold block mb-1">{kind==='category'?'Substituir fotografia da categoria':'Substituir fotografia principal'}</span>
                 <input 
                   type="file" 
                   accept="image/jpeg,image/png,image/webp" 
-                  onChange={e=>upload(e.target.files?.[0])} 
+                  disabled={busy}
+                  onChange={e=>{openCrop(e.target.files?.[0]);e.currentTarget.value='';}}
                   className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-navy-soft"
                 />
               </label>
-              <p className="text-xs text-muted-foreground">Formatos suportados: JPG, PNG ou WebP de até 5 MB.</p>
+              <p className="text-xs text-muted-foreground">JPG, PNG ou WebP de até 5 MB. O corte 4:3 e a otimização são confirmados antes do upload.</p>
               {edit.imagePath && (
                 <div className="flex items-center gap-3 pt-1">
-                  <span className="text-xs font-medium text-emerald-600">✓ Fotografia salva no cadastro</span>
+                  <span className="text-xs font-medium text-emerald-600">✓ Caminho da imagem selecionada</span>
                   <Button 
                     type="button" 
                     variant="ghost" 
                     size="sm" 
+                    disabled={kind==='product'&&'category' in edit&&edit.additionalImagePaths.length>0}
                     onClick={()=>{
                       patch('imagePath','');
                       setPreviewUrl('');
@@ -791,6 +909,35 @@ function Admin(){
                   >
                     <Trash2 className="h-3.5 w-3.5 mr-1" />Remover foto
                   </Button>
+                </div>
+              )}
+              {kind==='product'&&'category' in edit&&(
+                <div className="space-y-3 border-t border-border pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold">Galeria adicional ({edit.additionalImagePaths.length}/{MAX_ADDITIONAL_IMAGES})</span>
+                    <label className="cursor-pointer">
+                      <span className="sr-only">Adicionar fotografia à galeria</span>
+                      <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy||edit.additionalImagePaths.length>=MAX_ADDITIONAL_IMAGES} className="hidden" onChange={event=>{openCrop(event.target.files?.[0],'additional');event.currentTarget.value='';}} />
+                      <span className={`inline-flex items-center rounded-full border px-3 py-2 text-sm font-medium ${busy||edit.additionalImagePaths.length>=MAX_ADDITIONAL_IMAGES?'cursor-not-allowed opacity-50':'cursor-pointer hover:bg-secondary'}`}>
+                        <Plus className="mr-1 h-4 w-4" />Adicionar
+                      </span>
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {edit.additionalImagePaths.map((path,index)=>(
+                      <div key={path} className="space-y-2 rounded-xl border border-border p-2">
+                        <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-muted">
+                          {additionalImagePreviews[path]?<img src={additionalImagePreviews[path]} alt={`Fotografia adicional ${index+1}`} className="h-full w-full object-cover" />:<ImageIcon className="h-8 w-8 text-muted-foreground" />}
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={()=>promoteAdditionalImage(path)}>Principal</Button>
+                          <Button type="button" size="icon" variant="ghost" aria-label={`Mover fotografia ${index+1} para cima`} disabled={busy||index===0} onClick={()=>moveAdditionalImage(index,index-1)}><ArrowUp className="h-4 w-4" /></Button>
+                          <Button type="button" size="icon" variant="ghost" aria-label={`Mover fotografia ${index+1} para baixo`} disabled={busy||index===edit.additionalImagePaths.length-1} onClick={()=>moveAdditionalImage(index,index+1)}><ArrowDown className="h-4 w-4" /></Button>
+                          <Button type="button" size="icon" variant="ghost" aria-label={`Remover fotografia ${index+1}`} disabled={busy} onClick={()=>removeAdditionalImage(path)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -808,6 +955,11 @@ function Admin(){
         </div>
       </div>
     )}
+    <ImageCropDialog
+      file={cropFile}
+      onCancel={()=>setCropFile(null)}
+      onConfirm={file=>{setCropFile(null);void uploadProcessedImage(file);}}
+    />
 
     {/* ABA CONTATO */}
     {tab==='Contato' && (

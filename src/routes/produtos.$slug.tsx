@@ -1,4 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { useState } from 'react';
 import { catalogQuery } from "@/lib/catalog-context";
 import { Button } from "@/components/ui/button";
 import { useQuote } from "@/lib/quote";
@@ -29,6 +30,8 @@ export const Route = createFileRoute("/produtos/$slug")({
 function ProductPage() {
   const { product: p, category } = Route.useLoaderData();
   const { add, has } = useQuote();
+  const gallery = [p.image, ...p.additionalImages].filter(Boolean);
+  const [activeImage, setActiveImage] = useState(0);
 
   const dim = p.dimensions && p.dimensions.length && p.dimensions.width 
     ? `${p.dimensions.length} × ${p.dimensions.width}${p.dimensions.height ? ` × ${p.dimensions.height}` : ''} ${p.dimensions.unit || 'cm'}` 
@@ -39,8 +42,24 @@ function ProductPage() {
 
   return (
     <section className="mx-auto grid max-w-7xl gap-10 px-5 py-12 md:grid-cols-2">
-      <div className="overflow-hidden rounded-3xl bg-muted shadow-card">
-        <img src={p.image} alt={p.name} width={912} height={736} className="h-full w-full object-cover" />
+      <div className="space-y-3">
+        <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-3xl bg-muted shadow-card">
+          <img src={gallery[activeImage]??p.image} alt={p.name} width={1600} height={1200} className="h-full w-full object-contain" />
+        </div>
+        {gallery.length>1&&<div className="flex gap-2 overflow-x-auto pb-2" aria-label="Galeria de fotografias do produto">
+          {gallery.map((image,index)=>(
+            <button
+              key={image}
+              type="button"
+              onClick={()=>setActiveImage(index)}
+              aria-label={index===0?'Ver fotografia principal':`Ver fotografia adicional ${index}`}
+              aria-pressed={activeImage===index}
+              className={`h-20 w-24 shrink-0 overflow-hidden rounded-lg border-2 bg-muted ${activeImage===index?'border-primary':'border-transparent'}`}
+            >
+              <img src={image} alt="" loading={index===0?'eager':'lazy'} className="h-full w-full object-cover" />
+            </button>
+          ))}
+        </div>}
       </div>
       <div>
         <div className="flex flex-wrap items-center gap-2">

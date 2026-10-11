@@ -7,7 +7,7 @@ export const catalogQuery=queryOptions({queryKey:['catalog'],queryFn:async()=>{
  const categories=data.categories.map(c=>({...c,image:c.image||imageMap[c.imageKey]||imageMap['burger']||''}));
  const products=data.products.map(p=>({...p,image:p.image||categories.find(c=>c.slug===p.category)?.image||''}));
  return {...data,categories,products};
-},staleTime:30_000});
+},staleTime:30_000,refetchInterval:50*60_000});
 const Ctx=createContext<CatalogData|null>(null);
 export function CatalogProvider({children}:{children:ReactNode}){
  const {data}=useSuspenseQuery(catalogQuery);
