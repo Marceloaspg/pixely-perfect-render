@@ -7,3 +7,4 @@
 - [x] Armazenar solicitações e configurar WhatsApp oficial (19) 99614-5193.
 - [x] Preservar layout e reduzir todas as superfícies públicas às sete categorias solicitadas, sem apagar registros reais.
 - [x] Atualizar subtítulo para Amparo e região e botão Ver produtos nas categorias.
+- [x] Etapa B local: categorias dinâmicas, subcategorias visuais, ativação e reordenação persistida sem alteração remota do banco.

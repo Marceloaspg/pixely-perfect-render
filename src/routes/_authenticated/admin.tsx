@@ -1,24 +1,14 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { queryOptions, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { getAdminCatalog, saveCatalogItem } from '@/lib/catalog.functions';
-import { allowedCategories, categoryDataSchema, productDataSchema, contactSchema, type Product, type Category, type SiteConfig } from '@/data/catalog';
+import { getAdminCatalog, reorderCatalogCategories, saveCatalogItem } from '@/lib/catalog.functions';
+import { categoryDataSchema, categorySlugSchema, imageMap, productDataSchema, contactSchema, slugify, sortCategories, type Product, type Category, type SiteConfig } from '@/data/catalog';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Plus, LogOut, Pencil, Upload, Save, Search, Image as ImageIcon, Trash2, Filter } from 'lucide-react';
+import { Plus, LogOut, Pencil, Upload, Save, Search, Image as ImageIcon, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 
 const adminQuery=queryOptions({queryKey:['admin-catalog'],queryFn:()=>getAdminCatalog()});
-
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 120);
-}
 
 export const Route=createFileRoute('/_authenticated/admin')({
   loader:({context})=>context.queryClient.ensureQueryData(adminQuery),
@@ -38,6 +28,7 @@ function Admin(){
  const qc=useQueryClient();
  const nav=useNavigate();
  const save=useServerFn(saveCatalogItem);
+ const saveOrder=useServerFn(reorderCatalogCategories);
 
  const [tab,setTab]=useState('Produtos');
  const [edit,setEdit]=useState<Product|Category|null>(null);
@@ -46,6 +37,8 @@ function Admin(){
  const [message,setMessage]=useState('');
  const [busy,setBusy]=useState(false);
  const [previewUrl,setPreviewUrl]=useState<string>('');
+ const [categorySlugEdited,setCategorySlugEdited]=useState(false);
+ const pendingCategoryUploads=useRef(new Set<string>());
 
  // Filtros da listagem de produtos
  const [searchQuery,setSearchQuery]=useState('');
@@ -53,7 +46,10 @@ function Admin(){
  const [filterStatus,setFilterStatus]=useState<'all'|'active'|'inactive'|'demo'>('all');
 
  const cats=data.catalog.categories;
+ const orderedCats=sortCategories(cats);
+ const categoryEdit=edit&&!('category' in edit)?edit:null;
  const isExistingProduct = kind === 'product' && !!edit && 'category' in edit && data.catalog.products.some(p => p.slug === edit.slug && p.slug !== '');
+ const isExistingCategory = kind === 'category' && !!categoryEdit && cats.some(c => c.slug === categoryEdit.slug);
 
  const filteredProducts = data.catalog.products.filter(p => {
    const q = searchQuery.trim().toLowerCase();
@@ -70,6 +66,41 @@ function Admin(){
  async function refresh(){
    await qc.invalidateQueries({queryKey:['catalog']});
    await qc.invalidateQueries({queryKey:['admin-catalog']});
+ }
+
+ function revokePreview(url=previewUrl) {
+   if(url.startsWith('blob:')) URL.revokeObjectURL(url);
+ }
+
+ async function removePendingCategoryUploads(keepPath=''):Promise<string|undefined> {
+   const paths=[...pendingCategoryUploads.current].filter(path=>path!==keepPath);
+   if(paths.length===0)return undefined;
+   try{
+     const result=await supabase.storage.from('catalog-images').remove(paths);
+     if(result.error)return result.error.message;
+     for(const path of paths)pendingCategoryUploads.current.delete(path);
+     return undefined;
+   }catch(error){
+     return error instanceof Error?error.message:'erro inesperado';
+   }
+ }
+
+ async function cancelEditor() {
+   setBusy(true);
+   const shouldRemoveCategoryUploads=kind==='category'&&!!categoryEdit&&!isExistingCategory;
+   let cleanupError:string|undefined;
+   try{
+     if(shouldRemoveCategoryUploads)cleanupError=await removePendingCategoryUploads();
+   }catch(error){
+     cleanupError=error instanceof Error?error.message:'erro inesperado';
+   }finally{
+     revokePreview();
+     setEdit(null);
+     setPreviewUrl('');
+     setCategorySlugEdited(false);
+     setMessage(cleanupError?`Cadastro cancelado, mas não foi possível remover a fotografia temporária: ${cleanupError}`:'');
+     setBusy(false);
+   }
  }
 
  async function store(){
@@ -89,25 +120,36 @@ function Admin(){
       data:{
         kind,
         slug:finalSlug,
-        category:edit.category as typeof allowedCategories[number],
+        category:edit.category,
         active:edit.active,
         data:parsedData
       }
     });
    } else {
+    if(!categoryEdit) throw new Error('Não foi possível identificar a categoria.');
+    const finalSlug=categorySlugSchema.parse(categoryEdit.slug.trim()||slugify(categoryEdit.name));
     await save({
       data:{
         kind:'category',
-        slug:edit.slug as typeof allowedCategories[number],
-        active:edit.active,
-        data:categoryDataSchema.parse(edit)
+        mode:isExistingCategory?'update':'create',
+        slug:finalSlug,
+        active:categoryEdit.active,
+        data:categoryDataSchema.parse({...categoryEdit,order:categoryEdit.order??orderedCats.length})
       }
     });
    }
    await refresh();
+   const isNewCategory=kind==='category'&&categoryEdit&&!isExistingCategory;
+   const savedCategoryImage=isNewCategory?categoryEdit.imagePath:'';
+   const cleanupError=isNewCategory?await removePendingCategoryUploads(savedCategoryImage):undefined;
+   if(savedCategoryImage)pendingCategoryUploads.current.delete(savedCategoryImage);
+   revokePreview();
    setEdit(null);
    setPreviewUrl('');
-   setMessage('Alterações salvas com sucesso.');
+   setCategorySlugEdited(false);
+   setMessage(cleanupError
+     ?`Alterações salvas, mas não foi possível remover uma fotografia temporária: ${cleanupError}`
+     :'Alterações salvas com sucesso.');
   }catch(e){
     setMessage(e instanceof Error ? e.message : 'Não foi possível salvar.');
   }finally{
@@ -124,24 +166,31 @@ function Admin(){
   setBusy(true);
   setMessage('Enviando fotografia...');
   const localUrl = URL.createObjectURL(file);
+  revokePreview();
   setPreviewUrl(localUrl);
 
   const path=`${crypto.randomUUID()}.${file.type.split('/')[1]}`;
-  const r=await supabase.storage.from('catalog-images').upload(path,file);
-  if(r.error){
-   const isMissingBucket = r.error.message.includes('not found') || r.error.message.includes('NoSuchBucket');
-   setMessage(isMissingBucket 
-     ? 'Bucket "catalog-images" não encontrado no Supabase Storage. Crie o bucket para habilitar o envio de fotos.' 
-     : `Não foi possível enviar a foto: ${r.error.message}`);
-  }else{
-   setEdit({...edit,imagePath:path});
-   setMessage('Fotografia enviada com sucesso.');
+  try{
+   const r=await supabase.storage.from('catalog-images').upload(path,file);
+   if(r.error){
+    const isMissingBucket = r.error.message.includes('not found') || r.error.message.includes('NoSuchBucket');
+    setMessage(isMissingBucket
+      ? 'Bucket "catalog-images" não encontrado no Supabase Storage. Crie o bucket para habilitar o envio de fotos.'
+      : `Não foi possível enviar a foto: ${r.error.message}`);
+   }else{
+    setEdit(current=>current?{...current,imagePath:path}:current);
+    if(kind==='category'&&categoryEdit&&!isExistingCategory)pendingCategoryUploads.current.add(path);
+    setMessage('Fotografia enviada com sucesso.');
+   }
+  }catch(error){
+   setMessage(`Não foi possível enviar a foto: ${error instanceof Error?error.message:'erro inesperado'}`);
+  }finally{
+   setBusy(false);
   }
-  setBusy(false);
  }
 
  function patch(key:string,value:unknown){
-   if(edit) setEdit({...edit,[key]:value});
+   setEdit(current=>current?{...current,[key]:value}:current);
  }
 
  function startEditProduct(p: Product) {
@@ -155,13 +204,64 @@ function Admin(){
    setKind('product');
    setEdit({
      slug:'',
-     category:allowedCategories[0],
+     category:cats[0]?.slug??'',
      ...productDataSchema.parse({name:'Novo produto',description:''}),
      image:'',
      active:false
    });
    setPreviewUrl('');
    setMessage('');
+ }
+
+ function startNewCategory() {
+   setKind('category');
+   setCategorySlugEdited(false);
+   setEdit({
+     slug:'',
+     name:'',
+     number:String(cats.length+1).padStart(2,'0'),
+     order:orderedCats.length,
+     description:'',
+     imageKey:'burger',
+     imagePath:'',
+     subcategories:[],
+     image:'',
+     active:false,
+   });
+   setPreviewUrl('');
+   setMessage('');
+ }
+
+ async function moveCategory(slug:string, offset:-1|1) {
+   const index=orderedCats.findIndex(category=>category.slug===slug);
+   const target=index+offset;
+   if(index<0||target<0||target>=orderedCats.length)return;
+   const slugs=orderedCats.map(category=>category.slug);
+   [slugs[index],slugs[target]]=[slugs[target]!,slugs[index]!];
+   setBusy(true);
+   setMessage('');
+   try{
+     await saveOrder({data:{slugs}});
+     await refresh();
+     setMessage('Ordem das categorias salva com sucesso.');
+   }catch(error){
+     setMessage(error instanceof Error?error.message:'Não foi possível reorganizar as categorias.');
+   }finally{
+     setBusy(false);
+   }
+ }
+
+ function updateSubcategory(index:number,value:string) {
+   if(categoryEdit)setEdit({...categoryEdit,subcategories:categoryEdit.subcategories.map((item,i)=>i===index?value:item)});
+ }
+
+ function moveSubcategory(index:number,offset:-1|1) {
+   if(!categoryEdit)return;
+   const target=index+offset;
+   if(target<0||target>=categoryEdit.subcategories.length)return;
+   const subcategories=[...categoryEdit.subcategories];
+   [subcategories[index],subcategories[target]]=[subcategories[target]!,subcategories[index]!];
+   setEdit({...categoryEdit,subcategories});
  }
 
  const currentDimensions = (edit && 'dimensions' in edit && edit.dimensions) ? edit.dimensions : { length: '', width: '', height: '', unit: 'cm' };
@@ -180,7 +280,7 @@ function Admin(){
 
     <div className="my-8 flex flex-wrap gap-2">
       {['Produtos','Categorias','Contato','Orçamentos'].map(t=>(
-        <Button key={t} variant={tab===t?'default':'secondary'} onClick={()=>{setTab(t);setEdit(null);setPreviewUrl('');setMessage('');}}>
+        <Button key={t} disabled={busy} variant={tab===t?'default':'secondary'} onClick={async()=>{if(edit)await cancelEditor();setTab(t);setMessage('');}}>
           {t}
         </Button>
       ))}
@@ -296,19 +396,41 @@ function Admin(){
 
     {/* ABA CATEGORIAS */}
     {tab==='Categorias' && !edit && (
-      <div className="divide-y divide-border rounded-2xl border border-border bg-card shadow-card">
-        {cats.map(c=>(
-          <div key={c.slug} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 p-4">
-            <div>
-              <p className="font-bold text-navy">{c.number} — {c.name}</p>
-              <p className="text-sm text-muted-foreground">{c.active?'Visível':'Desativada'} · {c.subcategories.length} subcategorias</p>
+      <>
+        <div className="mb-4 flex justify-end">
+          <Button onClick={startNewCategory} className="rounded-full bg-primary font-semibold text-primary-foreground hover:bg-navy-soft">
+            <Plus className="mr-2 h-4 w-4" />Nova categoria
+          </Button>
+        </div>
+        <div className="divide-y divide-border rounded-2xl border border-border bg-card shadow-card">
+          {orderedCats.map((c,index)=>(
+            <div key={c.slug} className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 p-4">
+              <div className="flex flex-col gap-1">
+                <Button type="button" variant="ghost" size="icon" aria-label={`Mover ${c.name} para cima`} disabled={busy||index===0} onClick={()=>moveCategory(c.slug,-1)}>
+                  <ArrowUp className="h-4 w-4" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" aria-label={`Mover ${c.name} para baixo`} disabled={busy||index===orderedCats.length-1} onClick={()=>moveCategory(c.slug,1)}>
+                  <ArrowDown className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
+                {c.image||imageMap[c.imageKey]?<img src={c.image||imageMap[c.imageKey]} alt="" className="h-full w-full object-cover" />:<ImageIcon className="h-5 w-5 text-muted-foreground" />}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate font-bold text-navy">{c.number} — {c.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  Ordem {index+1} · {data.catalog.products.filter(product=>product.category===c.slug).length} produtos · {c.subcategories.length} subcategorias ·{' '}
+                  <span className={c.active?'font-semibold text-emerald-600':'font-medium text-amber-600'}>{c.active?'Ativa':'Inativa'}</span>
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={()=>{setKind('category');setEdit(c);setPreviewUrl(c.image||imageMap[c.imageKey]||'');setCategorySlugEdited(false);setMessage('');}}>
+                <Pencil className="mr-1 h-3.5 w-3.5" />Editar
+              </Button>
             </div>
-            <Button variant="outline" size="sm" onClick={()=>{setKind('category');setEdit(c);setMessage('');}}>
-              <Pencil className="h-3.5 w-3.5 mr-1" />Editar
-            </Button>
-          </div>
-        ))}
-      </div>
+          ))}
+          {orderedCats.length===0&&<p className="p-8 text-center text-sm text-muted-foreground">Nenhuma categoria cadastrada.</p>}
+        </div>
+      </>
     )}
 
     {/* FORMULÁRIO DE EDIÇÃO ORGANIZADO */}
@@ -316,9 +438,9 @@ function Admin(){
       <div className="max-w-4xl space-y-8 rounded-2xl border border-border bg-card p-6 shadow-card md:p-8">
         <div className="flex items-center justify-between border-b border-border pb-4">
           <h2 className="text-xl font-bold text-navy">
-            {kind==='product' ? (isExistingProduct ? `Editar: ${edit.name}` : 'Cadastrar Novo Produto') : `Editar Categoria: ${edit.name}`}
+            {kind==='product' ? (isExistingProduct ? `Editar: ${edit.name}` : 'Cadastrar Novo Produto') : (isExistingCategory ? `Editar Categoria: ${edit.name}` : 'Cadastrar Nova Categoria')}
           </h2>
-          <Button variant="ghost" size="sm" onClick={()=>{setEdit(null);setPreviewUrl('');}}>Cancelar</Button>
+          <Button variant="ghost" size="sm" disabled={busy} onClick={cancelEditor}>Cancelar</Button>
         </div>
 
         {/* SEÇÃO 1: IDENTIFICAÇÃO BÁSICA */}
@@ -326,16 +448,48 @@ function Admin(){
           <h3 className="text-sm font-bold uppercase tracking-wider text-gold">1. Identificação Básica</h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block sm:col-span-2">
-              <span className="text-sm font-semibold">Nome do produto *</span>
+              <span className="text-sm font-semibold">{kind==='product'?'Nome do produto *':'Nome da categoria *'}</span>
               <input 
                 className="admin-input" 
                 value={edit.name} 
                 onChange={e=>{
-                  patch('name',e.target.value);
-                  if(!isExistingProduct && kind==='product' && !edit.slug) patch('slug',slugify(e.target.value));
+                  const name=e.target.value;
+                  if(kind==='category'&&!isExistingCategory){
+                    setEdit(current=>current&&!('category' in current)?{...current,name,slug:categorySlugEdited?current.slug:slugify(name)}:current);
+                  }else{
+                    patch('name',name);
+                    if(!isExistingProduct && kind==='product' && !edit.slug) patch('slug',slugify(name));
+                  }
                 }}
               />
             </label>
+
+            {kind==='category' && categoryEdit && (
+              <>
+                <label className="block sm:col-span-2">
+                  <span className="text-sm font-semibold">Slug da categoria *</span>
+                  <input
+                    className={`admin-input font-mono ${isExistingCategory?'cursor-not-allowed bg-muted opacity-70':''}`}
+                    value={categoryEdit.slug}
+                    readOnly={isExistingCategory}
+                    placeholder="ex: embalagens-para-pizzas"
+                    onChange={e=>{setCategorySlugEdited(true);patch('slug',slugify(e.target.value));}}
+                  />
+                  <span className="mt-1 block text-xs text-muted-foreground">Identificador único usado na URL; não pode ser alterado após salvar.</span>
+                </label>
+                <label className="block">
+                  <span className="text-sm font-semibold">Imagem padrão</span>
+                  <select className="admin-input" value={categoryEdit.imageKey} onChange={e=>patch('imageKey',e.target.value)}>
+                    <option value="burger">Hambúrguer</option>
+                    <option value="kraft">Kraft</option>
+                    <option value="paper">Papel</option>
+                    <option value="fries">Porções</option>
+                    <option value="hotdog">Hot dog</option>
+                    <option value="seal">Lacre</option>
+                  </select>
+                </label>
+              </>
+            )}
 
             {kind==='product' && 'category' in edit && (
               <>
@@ -515,23 +669,39 @@ function Admin(){
               </label>
             </div>
           </section>
-        ) : (
+        ) : categoryEdit ? (
           <section className="space-y-4 border-t border-border pt-6">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gold">Subcategorias e Ordem</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-gold">Subcategorias</h3>
+            <div className="space-y-2">
+              {categoryEdit.subcategories.map((subcategory,index)=>(
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    className="admin-input"
+                    aria-label={`Subcategoria ${index+1}`}
+                    value={subcategory}
+                    onChange={e=>updateSubcategory(index,e.target.value)}
+                  />
+                  <Button type="button" variant="outline" size="icon" aria-label="Mover subcategoria para cima" disabled={index===0} onClick={()=>moveSubcategory(index,-1)}>
+                    <ArrowUp className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" variant="outline" size="icon" aria-label="Mover subcategoria para baixo" disabled={index===categoryEdit.subcategories.length-1} onClick={()=>moveSubcategory(index,1)}>
+                    <ArrowDown className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" aria-label={`Remover subcategoria ${index+1}`} onClick={()=>setEdit({...categoryEdit,subcategories:categoryEdit.subcategories.filter((_,i)=>i!==index)})}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+              <Button type="button" variant="outline" onClick={()=>setEdit({...categoryEdit,subcategories:[...categoryEdit.subcategories,'']})}>
+                <Plus className="mr-2 h-4 w-4" />Adicionar subcategoria
+              </Button>
+            </div>
             <label className="block">
-              <span className="text-sm font-semibold">Subcategorias da categoria (uma por linha)</span>
-              <textarea 
-                className="admin-input min-h-32 text-xs font-mono" 
-                value={edit.subcategories.join('\n')} 
-                onChange={e=>patch('subcategories', e.target.value.split('\n'))}
-              />
-            </label>
-            <label className="block">
-              <span className="text-sm font-semibold">Número / Ordem da categoria</span>
-              <input className="admin-input" value={edit.number} onChange={e=>patch('number', e.target.value)} />
+              <span className="text-sm font-semibold">Número de identificação</span>
+              <input className="admin-input" maxLength={4} value={categoryEdit.number} onChange={e=>patch('number', e.target.value)} />
             </label>
           </section>
-        )}
+        ) : null}
 
         {/* SEÇÃO 4: VISIBILIDADE E STATUS */}
         <section className="space-y-4 border-t border-border pt-6">
@@ -615,7 +785,7 @@ function Admin(){
                     onClick={()=>{
                       patch('imagePath','');
                       setPreviewUrl('');
-                      setMessage('Fotografia removida do produto. Lembre-se de salvar.');
+                      setMessage(`Fotografia removida do ${kind==='category'?'cadastro da categoria':'produto'}. Lembre-se de salvar.`);
                     }}
                     className="text-destructive hover:bg-destructive/10 h-7 text-xs"
                   >
@@ -632,7 +802,7 @@ function Admin(){
           <Button disabled={busy} onClick={store} className="rounded-full bg-primary font-semibold text-primary-foreground hover:bg-navy-soft px-7">
             <Save className="h-4 w-4 mr-2" />{busy ? 'Salvando...' : 'Salvar alterações'}
           </Button>
-          <Button variant="outline" onClick={()=>{setEdit(null);setPreviewUrl('');}} className="rounded-full">
+          <Button variant="outline" disabled={busy} onClick={cancelEditor} className="rounded-full">
             Cancelar
           </Button>
         </div>
@@ -682,4 +852,3 @@ function Admin(){
   </section>
  );
 }
-
