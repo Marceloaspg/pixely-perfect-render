@@ -15,9 +15,9 @@ export const getCatalog = createServerFn({method:'GET'}).handler(async ():Promis
 async function readCatalog(db:ReturnType<typeof createClient<Database>>,admin:boolean):Promise<CatalogData>{
  const [cats,ps,cs]=await Promise.all([db.from('catalog_categories').select('*'),db.from('catalog_products').select('*'),db.from('contact_settings').select('data').eq('id',1).single()]);
  if(cats.error||ps.error||cs.error) throw new Error('Não foi possível carregar o catálogo.');
- const sign=async(path:string)=>{if(!path)return '';const r=await db.storage.from('catalog-images').createSignedUrl(path,3600);if(r.error)throw new Error('Não foi possível carregar a fotografia.'); const signed=r.data.signedUrl;const browserUrl=import.meta.env['VITE_SUPABASE_URL']; return browserUrl?signed.replace(process.env['SUPABASE_URL']??'',browserUrl):signed;};
+ const sign=async(path:string)=>{if(!path)return '';try{const r=await db.storage.from('catalog-images').createSignedUrl(path,3600);if(r.error||!r.data?.signedUrl)return '';const signed=r.data.signedUrl;const browserUrl=import.meta.env['VITE_SUPABASE_URL'];return browserUrl?signed.replace(process.env['SUPABASE_URL']??'',browserUrl):signed;}catch{return '';}};
  const categories=await Promise.all((cats.data??[]).filter(r=>admin||allowedCategories.some(s=>s===r.slug)).map(async r=>{const data=categoryDataSchema.parse(r.data);return {...data,slug:r.slug,active:r.active,image:await sign(data.imagePath)};}));
- const products=await Promise.all((ps.data??[]).filter(r=>admin||categories.some(c=>c.slug===r.category&&c.active)).map(async r=>{const data=productDataSchema.parse(r.data);return {...data,slug:r.slug,category:r.category,active:r.active,image:await sign(data.imagePath)};}));
+ const products=await Promise.all((ps.data??[]).filter(r=>admin||(r.active&&categories.some(c=>c.slug===r.category&&c.active))).map(async r=>{const data=productDataSchema.parse(r.data);return {...data,slug:r.slug,category:r.category,active:r.active,image:await sign(data.imagePath)};}));
  return {categories:categories.sort((a,b)=>a.number.localeCompare(b.number)),products:products.sort((a,b)=>a.order-b.order),config:contactSchema.parse(cs.data?.data)};
 }
 
@@ -37,8 +37,33 @@ export const saveCatalogItem=createServerFn({method:'POST'}).middleware([adminMi
 ]).parse(v)).handler(async({data,context})=>{
  const role=await context.supabase.rpc('has_role',{_user_id:context.userId,_role:'admin'});
  if(role.error||!role.data)throw new Error('Acesso restrito a administradores.');
- const r=data.kind==='contact'?await context.supabase.from('contact_settings').upsert({id:1,data:data.data as Json}):data.kind==='category'?await context.supabase.from('catalog_categories').upsert({slug:data.slug,active:data.active,data:data.data as Json}):await context.supabase.from('catalog_products').upsert({slug:data.slug,category:data.category,active:data.active,data:data.data as Json});
- if(r.error)throw new Error('Não foi possível salvar.'); return {ok:true};
+ if(data.kind==='contact'){
+  const r=await context.supabase.from('contact_settings').upsert({id:1,data:data.data as Json});
+  if(r.error)throw new Error('Não foi possível salvar.');
+  return {ok:true};
+ }
+ if(data.kind==='category'){
+  const r=await context.supabase.from('catalog_categories').upsert({slug:data.slug,active:data.active,data:data.data as Json});
+  if(r.error)throw new Error('Não foi possível salvar.');
+  return {ok:true};
+ }
+ const targetSku=data.data.sku?data.data.sku.trim().toLowerCase():'';
+ if(targetSku){
+  const existing=await context.supabase.from('catalog_products').select('slug, data').neq('slug',data.slug);
+  if(!existing.error&&existing.data){
+   const duplicate=existing.data.find(r=>{
+    const rawSku=(r.data as Record<string,unknown>|null)?.['sku'];
+    return typeof rawSku==='string'&&rawSku.trim().toLowerCase()===targetSku;
+   });
+   if(duplicate){
+    const dupName=(duplicate.data as Record<string,unknown>|null)?.['name']||duplicate.slug;
+    throw new Error(`O SKU "${data.data.sku.trim()}" já está em uso pelo produto "${dupName}".`);
+   }
+  }
+ }
+ const r=await context.supabase.from('catalog_products').upsert({slug:data.slug,category:data.category,active:data.active,data:data.data as Json});
+ if(r.error)throw new Error('Não foi possível salvar.');
+ return {ok:true};
 });
 export const saveQuote=createServerFn({method:'POST'}).inputValidator((v:unknown)=>z.object({requestKey:z.string().uuid(),contact:z.object({nome:z.string().trim().min(1).max(100),empresa:z.string().trim().min(1).max(100),cidade:z.string().trim().min(1).max(100)}),items:z.array(z.object({slug,name:z.string().min(1).max(120),quantity:z.string().trim().min(1).max(100)})).min(1).max(100)}).parse(v)).handler(async({data})=>{
  const {supabaseAdmin}=await import('@/integrations/supabase/client.server');
