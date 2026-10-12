@@ -7,6 +7,7 @@ import { categoryDataSchema, categorySlugSchema, filterPublicCatalog, productDat
 import { collectReferencedImagePaths, findUnreferencedImagePaths, uploadValidatedImage } from '@/lib/product-images';
 import { verifyAdminRole, SupabaseServiceUnavailableError } from '@/lib/admin-access';
 import { applySignedCatalogImageUrls, signCatalogImagePaths } from '@/lib/catalog-image-signing';
+import { filterEligibleHomepageBanners, getEligibleFeaturedProductSlugs, homepageBannerSchema, type HomepageBanner, type HomepageProductEligibilityRecord } from '@/lib/homepage-banners';
 
 export const getCatalog = createServerFn({method:'GET'}).handler(async ():Promise<CatalogData>=>{
  const url=process.env['SUPABASE_URL']; const key=process.env['SUPABASE_PUBLISHABLE_KEY'];
@@ -107,6 +108,7 @@ export const reorderCatalogCategories=createServerFn({method:'POST'}).middleware
 const imageUploadInput=z.object({
  contentType:z.enum(['image/jpeg','image/png','image/webp']),
  base64:z.string().min(1).max(7_000_000).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
+ purpose:z.enum(['catalog','banner']).default('catalog'),
 });
 export const uploadCatalogImage=createServerFn({method:'POST'}).middleware([adminMiddleware]).validator((v:unknown)=>imageUploadInput.parse(v)).handler(async({data,context})=>{
  await verifyAdminRole(()=>context.supabase.rpc('has_role',{_user_id:context.userId,_role:'admin'}));
@@ -119,8 +121,223 @@ export const uploadCatalogImage=createServerFn({method:'POST'}).middleware([admi
   bytes,
   data.contentType,
   crypto.randomUUID(),
+  data.purpose==='banner'?'banners':'catalog',
  );
  return {path};
+});
+
+type HomepageBannerRow=Database['public']['Tables']['homepage_banners']['Row'];
+
+function safeTechnicalType(error:unknown):string{
+ if(error instanceof Error)return error.name||'Error';
+ if(typeof error==='object'&&error!==null&&'status'in error&&typeof error.status==='number')return `HTTP ${error.status}`;
+ return 'unknown';
+}
+
+function homepageBannerFromRow(row:HomepageBannerRow,imageUrls:Map<string,string>):HomepageBanner{
+ const parsed=homepageBannerSchema.parse({
+  id:row.id,
+  type:row.type,
+  title:row.title,
+  subtitle:row.subtitle,
+  imagePath:row.image_path,
+  mobileImagePath:row.mobile_image_path,
+  buttonLabel:row.button_label,
+  buttonHref:row.button_href,
+  productSlug:row.product_slug,
+  displayOrder:row.display_order,
+  active:row.active,
+  startsAt:row.starts_at,
+  endsAt:row.ends_at,
+ });
+ return {
+  ...parsed,
+  id:row.id,
+  imageUrl:row.image_path?imageUrls.get(row.image_path)??'':'',
+  mobileImageUrl:row.mobile_image_path?imageUrls.get(row.mobile_image_path)??'':'',
+  archivedAt:row.archived_at,
+ };
+}
+
+async function signHomepageBannerRows(
+ db:ReturnType<typeof createClient<Database>>,
+ rows:HomepageBannerRow[],
+):Promise<HomepageBanner[]>{
+ const imagePaths=[...new Set(rows.flatMap(row=>[row.image_path,row.mobile_image_path].filter((path):path is string=>!!path)))];
+ const urls=await signCatalogImagePaths(imagePaths,batch=>db.storage.from('catalog-images').createSignedUrls(batch,3600));
+ const serverUrl=process.env['SUPABASE_URL'];
+ const browserUrl=import.meta.env['VITE_SUPABASE_URL'];
+ if(serverUrl&&browserUrl)for(const [path,url]of urls)urls.set(path,url.replace(serverUrl,browserUrl));
+ return rows.map(row=>homepageBannerFromRow(row,urls));
+}
+
+function createHomepageReadClient():ReturnType<typeof createClient<Database>>{
+ const url=process.env['SUPABASE_URL'];
+ const key=process.env['SUPABASE_PUBLISHABLE_KEY'];
+ if(!url||!key)throw new Error('Supabase server configuration unavailable.');
+ return createClient<Database>(url,key,{
+  auth:{persistSession:false,autoRefreshToken:false},
+  global:{fetch:(input,init)=>{
+   const headers=new Headers(typeof Request!=='undefined'&&input instanceof Request?input.headers:undefined);
+   if(init?.headers)new Headers(init.headers).forEach((value,name)=>headers.set(name,value));
+   if(key.startsWith('sb_')&&headers.get('Authorization')===`Bearer ${key}`)headers.delete('Authorization');
+   headers.set('apikey',key);
+   return fetch(input,{...init,headers});
+  }},
+ });
+}
+
+export const getHomepageBanners=createServerFn({method:'GET'}).handler(async():Promise<HomepageBanner[]>=>{
+ try{
+  const db=createHomepageReadClient();
+  const {data,error}=await db.from('homepage_banners').select('*').order('display_order').order('id');
+  if(error){
+   const isMigrationPending=error.code==='42P01'||error.code==='PGRST205';
+   const log=(isMigrationPending?console.warn:console.error);
+   log('[Homepage] Banner query unavailable; using institutional fallback.',{
+    errorType:safeTechnicalType(error),
+    code:error.code,
+   });
+   return [];
+  }
+  const rows=data??[];
+  const linkedSlugs=[...new Set(rows.flatMap(row=>row.product_slug?[row.product_slug]:[]))];
+  const linkedProducts=linkedSlugs.length
+   ?await db.from('catalog_products').select('slug,category,active,data').in('slug',linkedSlugs)
+   :{data:[],error:null};
+  if(linkedProducts.error)throw linkedProducts.error;
+  const productRecords:HomepageProductEligibilityRecord[]=(linkedProducts.data??[]).flatMap(row=>{
+   const parsed=productDataSchema.safeParse(row.data);
+   if(!parsed.success)return [];
+   return [{
+    slug:row.slug,
+    category:row.category,
+    active:row.active,
+    featured:parsed.data.featured,
+    demo:parsed.data.demo,
+    imagePath:parsed.data.imagePath,
+   }];
+  });
+  const linkedCategorySlugs=[...new Set(productRecords.map(product=>product.category))];
+  const linkedCategories=linkedCategorySlugs.length
+   ?await db.from('catalog_categories').select('slug,active').in('slug',linkedCategorySlugs)
+   :{data:[],error:null};
+  if(linkedCategories.error)throw linkedCategories.error;
+  const activeCategorySlugs=new Set((linkedCategories.data??[])
+   .filter(category=>category.active)
+   .map(category=>category.slug));
+  const eligibleIds=new Set(filterEligibleHomepageBanners(rows.map(row=>({
+   id:row.id,
+   active:row.active,
+   type:row.type,
+   productSlug:row.product_slug,
+   buttonHref:row.button_href,
+   archivedAt:row.archived_at,
+   startsAt:row.starts_at,
+   endsAt:row.ends_at,
+  })),productRecords,activeCategorySlugs).map(row=>row.id));
+  const eligibleRows=rows.filter(row=>eligibleIds.has(row.id));
+  return await signHomepageBannerRows(db,eligibleRows);
+ }catch(error){
+  console.error('[Homepage] Banner request failed; using institutional fallback.',{errorType:safeTechnicalType(error)});
+  return [];
+ }
+});
+
+export const getHomepageFeaturedProductSlugs=createServerFn({method:'GET'}).handler(async():Promise<string[]>=>{
+ try{
+  const db=createHomepageReadClient();
+  const {data:productRows,error:productsError}=await db.from('catalog_products').select('slug,category,active,data');
+  if(productsError)throw productsError;
+  const products:HomepageProductEligibilityRecord[]=(productRows??[]).flatMap(row=>{
+   const parsed=productDataSchema.safeParse(row.data);
+   if(!parsed.success)return [];
+   return [{
+    slug:row.slug,
+    category:row.category,
+    active:row.active,
+    featured:parsed.data.featured,
+    demo:parsed.data.demo,
+    imagePath:parsed.data.imagePath,
+   }];
+  });
+  const categorySlugs=[...new Set(products.map(product=>product.category))];
+  const {data:categoryRows,error:categoriesError}=categorySlugs.length
+   ?await db.from('catalog_categories').select('slug,active').in('slug',categorySlugs)
+   :{data:[],error:null};
+  if(categoriesError)throw categoriesError;
+  const activeCategorySlugs=new Set((categoryRows??[])
+   .filter(category=>category.active)
+   .map(category=>category.slug));
+  return [...getEligibleFeaturedProductSlugs(products,activeCategorySlugs)];
+ }catch(error){
+  console.error('[Homepage] Featured products unavailable; omitting automatic product slides.',{errorType:safeTechnicalType(error)});
+  return [];
+ }
+});
+
+export const getAdminHomepageBanners=createServerFn({method:'GET'}).middleware([adminMiddleware]).handler(async({context})=>{
+ await verifyAdminRole(()=>context.supabase.rpc('has_role',{_user_id:context.userId,_role:'admin'}));
+ const {data,error}=await context.supabase.from('homepage_banners').select('*').order('display_order').order('id');
+ if(error){
+  if(error.code==='42P01'||error.code==='PGRST205')throw new Error('A migração local de banners ainda não foi aplicada no ambiente conectado.');
+  throw new Error('Não foi possível carregar os banners. Tente novamente.');
+ }
+ return signHomepageBannerRows(context.supabase,data??[]);
+});
+
+const bannerImagePath=z.string().regex(/^banners\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/i);
+const saveHomepageBannerInput=homepageBannerSchema.and(z.object({
+ imagePath:bannerImagePath.nullable(),
+ mobileImagePath:bannerImagePath.nullable(),
+}));
+
+export const saveHomepageBanner=createServerFn({method:'POST'}).middleware([adminMiddleware]).validator((value:unknown)=>saveHomepageBannerInput.parse(value)).handler(async({data,context})=>{
+ await verifyAdminRole(()=>context.supabase.rpc('has_role',{_user_id:context.userId,_role:'admin'}));
+ if(data.productSlug){
+  const {data:product,error}=await context.supabase.from('catalog_products').select('slug').eq('slug',data.productSlug).maybeSingle();
+  if(error)throw new Error('Não foi possível validar o produto vinculado.');
+  if(!product)throw new Error('O produto vinculado não existe mais. Atualize o painel.');
+ }
+ const row={
+  type:data.type,
+  title:data.title,
+  subtitle:data.subtitle,
+  image_path:data.imagePath,
+  mobile_image_path:data.mobileImagePath,
+  button_label:data.buttonLabel,
+  button_href:data.buttonHref,
+  product_slug:data.productSlug,
+  display_order:data.displayOrder,
+  active:data.active,
+  starts_at:data.startsAt,
+  ends_at:data.endsAt,
+  updated_at:new Date().toISOString(),
+ };
+ const result=data.id
+  ?await context.supabase.from('homepage_banners').update(row).eq('id',data.id).is('archived_at',null).select('*').maybeSingle()
+  :await context.supabase.from('homepage_banners').insert(row).select('*').single();
+ if(result.error)throw new Error('Não foi possível salvar o banner. Verifique a migração e os dados informados.');
+ if(!result.data)throw new Error('O banner não existe mais ou já foi arquivado.');
+ return (await signHomepageBannerRows(context.supabase,[result.data]))[0]!;
+});
+
+export const archiveHomepageBanner=createServerFn({method:'POST'}).middleware([adminMiddleware]).validator((value:unknown)=>z.object({id:z.string().uuid()}).parse(value)).handler(async({data,context})=>{
+ await verifyAdminRole(()=>context.supabase.rpc('has_role',{_user_id:context.userId,_role:'admin'}));
+ const {data:archived,error}=await context.supabase.from('homepage_banners')
+  .update({active:false,archived_at:new Date().toISOString(),updated_at:new Date().toISOString()})
+  .eq('id',data.id).is('archived_at',null).select('id').maybeSingle();
+ if(error)throw new Error('Não foi possível arquivar o banner.');
+ if(!archived)throw new Error('O banner não existe mais ou já foi arquivado.');
+ return {ok:true};
+});
+
+export const reorderHomepageBanners=createServerFn({method:'POST'}).middleware([adminMiddleware]).validator((value:unknown)=>z.object({ids:z.array(z.string().uuid()).max(500)}).parse(value)).handler(async({data,context})=>{
+ await verifyAdminRole(()=>context.supabase.rpc('has_role',{_user_id:context.userId,_role:'admin'}));
+ if(new Set(data.ids).size!==data.ids.length)throw new Error('A sequência contém banners duplicados.');
+ const {error}=await context.supabase.rpc('reorder_homepage_banners',{_ids:data.ids});
+ if(error)throw new Error('Não foi possível salvar a ordem dos banners. Atualize o painel e tente novamente.');
+ return {ok:true};
 });
 
 async function listCatalogImagePaths(db:ReturnType<typeof createClient<Database>>):Promise<string[]> {
@@ -137,7 +354,7 @@ async function listCatalogImagePaths(db:ReturnType<typeof createClient<Database>
    if((data?.length??0)<1000)return;
   }
  }
- await visit('');
+ await visit('catalog');
  return paths;
 }
 
@@ -172,8 +389,45 @@ export const removeUnreferencedCatalogImages=createServerFn({method:'POST'}).mid
  if(result.error)throw new Error(`Não foi possível remover os uploads temporários: ${result.error.message}`);
  return {ok:true};
 });
-export const saveQuote=createServerFn({method:'POST'}).inputValidator((v:unknown)=>z.object({requestKey:z.string().uuid(),contact:z.object({nome:z.string().trim().min(1).max(100),empresa:z.string().trim().min(1).max(100),cidade:z.string().trim().min(1).max(100)}),items:z.array(z.object({slug,name:z.string().min(1).max(120),quantity:z.string().trim().min(1).max(100)})).min(1).max(100)}).parse(v)).handler(async({data})=>{
- const {supabaseAdmin}=await import('@/integrations/supabase/client.server');
- const r=await supabaseAdmin.from('quote_requests').upsert({request_key:data.requestKey,contact:data.contact,items:data.items},{onConflict:'request_key',ignoreDuplicates:true});
- if(r.error)throw new Error('Não foi possível registrar sua solicitação. Tente novamente.');return {ok:true};
+const quoteRequestInput=z.object({
+ requestKey:z.string().uuid(),
+ contact:z.object({
+  nome:z.string().trim().min(1).max(100),
+  empresa:z.string().trim().max(100).optional().default(''),
+  cidade:z.string().trim().min(1).max(100),
+  whatsapp:z.string().trim().min(1).max(30),
+  observations:z.string().trim().max(1000).optional().default(''),
+ }),
+ items:z.array(z.object({
+  id:z.string().optional(),
+  slug:z.string().min(1).max(120),
+  name:z.string().trim().min(1).max(120),
+  quantity:z.string().trim().regex(/^\d+(?:[.,]\d+)?$/).max(30)
+   .refine(value=>Number(value.replace(',','.'))>0,'A quantidade deve ser maior que zero.'),
+  variationId:z.string().max(300).optional(),
+  variation:z.string().max(120).optional(),
+  sku:z.string().max(60).optional(),
+  material:z.string().max(120).optional(),
+  dimensions:z.string().max(100).optional(),
+  packageQuantity:z.number().int().positive().nullable().optional(),
+  packageType:z.string().max(20).optional(),
+  packUnit:z.string().max(120).optional(),
+ })).min(1).max(100),
+});
+export const saveQuote=createServerFn({method:'POST'}).inputValidator((value:unknown)=>quoteRequestInput.parse(value)).handler(async({data})=>{
+ try{
+  const {supabaseAdmin}=await import('@/integrations/supabase/client.server');
+  const result=await supabaseAdmin.from('quote_requests').upsert(
+   {request_key:data.requestKey,contact:data.contact,items:data.items},
+   {onConflict:'request_key',ignoreDuplicates:true},
+  );
+  if(result.error)throw result.error;
+  return {saved:true};
+ }catch(error){
+  console.error('[Quote] Não foi possível registrar a solicitação.',{
+   errorType:error instanceof Error?error.name:'unknown',
+   status:typeof error==='object'&&error!==null&&'status' in error&&typeof error.status==='number'?error.status:undefined,
+  });
+  return {saved:false};
+ }
 });

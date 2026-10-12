@@ -115,10 +115,11 @@ export async function uploadValidatedImage(
   bytes: Uint8Array,
   declaredType: string,
   id: string,
+  folder: 'catalog' | 'banners' = 'catalog',
 ): Promise<string> {
   const contentType = validateImageBytes(bytes, declaredType);
   const extension = contentType === 'image/jpeg' ? 'jpg' : contentType.split('/')[1]!;
-  const path = `catalog/${id}.${extension}`;
+  const path = `${folder}/${id}.${extension}`;
   let result: { error: { message: string } | null };
   try {
     result = await upload(path, bytes, contentType);

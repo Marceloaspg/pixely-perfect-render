@@ -10,10 +10,12 @@ export function ImageCropDialog({
   file,
   onCancel,
   onConfirm,
+  aspectRatio = '4/3',
 }: {
   file: File | null;
   onCancel: () => void;
   onConfirm: (processed: File) => void;
+  aspectRatio?: '4/3' | '16/9';
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -127,12 +129,12 @@ export function ImageCropDialog({
       <DialogContent className="max-h-[95vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Enquadrar fotografia</DialogTitle>
-          <DialogDescription>Arraste para posicionar, ajuste o zoom e confirme o corte 4:3 antes do upload. Arquivo original: até {Math.round(MAX_IMAGE_INPUT_BYTES / 1024 / 1024)} MB.</DialogDescription>
+          <DialogDescription>Arraste para posicionar, ajuste o zoom e confirme o corte {aspectRatio.replace('/', ':')} antes do upload. Arquivo original: até {Math.round(MAX_IMAGE_INPUT_BYTES / 1024 / 1024)} MB.</DialogDescription>
         </DialogHeader>
         {file && sourceUrl && (
           <div
             ref={stageRef}
-            className="relative aspect-[4/3] w-full touch-none overflow-hidden rounded-xl bg-black"
+            className={`relative w-full touch-none overflow-hidden rounded-xl bg-black ${aspectRatio === '16/9' ? 'aspect-[16/9]' : 'aspect-[4/3]'}`}
             onPointerDown={event => {
               event.currentTarget.setPointerCapture(event.pointerId);
               setDragStart({ pointerX: event.clientX, pointerY: event.clientY, ...offset });

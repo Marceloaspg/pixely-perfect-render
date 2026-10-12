@@ -1,8 +1,11 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import type { KeyboardEvent } from 'react';
 import { catalogQuery } from "@/lib/catalog-context";
 import { Button } from "@/components/ui/button";
 import { useQuote } from "@/lib/quote";
+import { getProductGalleryImages, getProductPublicSections, isQuoteVariationSelectionValid, nextGalleryIndex } from '@/lib/quote-model';
 
 export const Route = createFileRoute("/produtos/$slug")({
   loader: async ({ params, context }) => {
@@ -30,36 +33,72 @@ export const Route = createFileRoute("/produtos/$slug")({
 function ProductPage() {
   const { product: p, category } = Route.useLoaderData();
   const { add, has } = useQuote();
-  const gallery = [p.image, ...p.additionalImages].filter(Boolean);
+  const gallery = getProductGalleryImages(p);
   const [activeImage, setActiveImage] = useState(0);
+  const [selectedVariation, setSelectedVariation] = useState(p.variations.length === 1 ? p.variations[0]! : '');
+  const touchStartX = useRef<number | null>(null);
+  useEffect(() => {
+    setActiveImage(0);
+    setSelectedVariation(p.variations.length === 1 ? p.variations[0]! : '');
+  }, [p.slug, p.variations]);
 
-  const dim = p.dimensions && p.dimensions.length && p.dimensions.width 
+  const dim = p.dimensions && p.dimensions.length && p.dimensions.width
     ? `${p.dimensions.length} × ${p.dimensions.width}${p.dimensions.height ? ` × ${p.dimensions.height}` : ''} ${p.dimensions.unit || 'cm'}` 
     : null;
-  const packaging = p.packageQuantity 
+  const packaging = p.packageQuantity
     ? `${p.packageType ? p.packageType.charAt(0).toUpperCase() + p.packageType.slice(1) + ' com ' : ''}${p.packageQuantity} unidades` 
     : null;
+  const variations = [...new Set(p.variations.map(value => value.trim()).filter(Boolean))];
+  const selected = variations.length === 1 ? variations[0] : selectedVariation;
+  const alreadyAdded = has(p.slug, selected || undefined);
+  const publicSections = getProductPublicSections(p);
+  const packageInfo = packaging || p.packUnit.trim();
+  const changeImage = (step: number) => setActiveImage(index => nextGalleryIndex(index, step, gallery.length));
+  const handleGalleryKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      changeImage(-1);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      changeImage(1);
+    }
+  };
 
   return (
     <section className="mx-auto grid max-w-7xl gap-10 px-5 py-12 md:grid-cols-2">
       <div className="space-y-3">
-        <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-3xl bg-muted shadow-card">
-          <img src={gallery[activeImage]??p.image} alt={p.name} width={1600} height={1200} className="h-full w-full object-contain" />
+        <div
+          className="group relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-3xl bg-muted shadow-card"
+          role="group"
+          aria-label="Galeria de fotografias do produto"
+          tabIndex={gallery.length > 1 ? 0 : undefined}
+          onKeyDown={handleGalleryKeyDown}
+          onTouchStart={event => { touchStartX.current = event.changedTouches[0]?.clientX ?? null; }}
+          onTouchEnd={event => {
+            const start = touchStartX.current;
+            const end = event.changedTouches[0]?.clientX;
+            touchStartX.current = null;
+            if (start === null || end === undefined || Math.abs(end - start) < 40 || gallery.length < 2) return;
+            changeImage(end < start ? 1 : -1);
+          }}
+        >
+          {gallery[activeImage] && (
+            <img key={gallery[activeImage]} src={gallery[activeImage]} alt={p.name} width={1600} height={1200} className="h-full w-full object-contain" />
+          )}
+          {gallery.length > 1 && (
+            <>
+              <button type="button" aria-label="Fotografia anterior" onClick={() => changeImage(-1)} className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-background/85 p-2 text-navy shadow transition hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button type="button" aria-label="Próxima fotografia" onClick={() => changeImage(1)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-background/85 p-2 text-navy shadow transition hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                <ChevronRight className="h-5 w-5" />
+              </button>
+              <span aria-live="polite" className="absolute bottom-3 right-3 rounded-full bg-background/85 px-2.5 py-1 text-xs font-semibold text-navy">
+                {activeImage + 1}/{gallery.length}
+              </span>
+            </>
+          )}
         </div>
-        {gallery.length>1&&<div className="flex gap-2 overflow-x-auto pb-2" aria-label="Galeria de fotografias do produto">
-          {gallery.map((image,index)=>(
-            <button
-              key={image}
-              type="button"
-              onClick={()=>setActiveImage(index)}
-              aria-label={index===0?'Ver fotografia principal':`Ver fotografia adicional ${index}`}
-              aria-pressed={activeImage===index}
-              className={`h-20 w-24 shrink-0 overflow-hidden rounded-lg border-2 bg-muted ${activeImage===index?'border-primary':'border-transparent'}`}
-            >
-              <img src={image} alt="" loading={index===0?'eager':'lazy'} className="h-full w-full object-cover" />
-            </button>
-          ))}
-        </div>}
       </div>
       <div>
         <div className="flex flex-wrap items-center gap-2">
@@ -68,7 +107,7 @@ function ProductPage() {
         </div>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-navy md:text-4xl">{p.name}</h1>
         {p.demo && <p className="mt-2 inline-block rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-muted-foreground">Produto demonstrativo — exemplo</p>}
-        <p className="mt-5 text-muted-foreground">{p.description}</p>
+        {p.description.trim() && <p className="mt-5 text-muted-foreground">{p.description}</p>}
 
         {(p.material || dim || packaging) && (
           <div className="mt-6 border-t border-border pt-5">
@@ -86,23 +125,41 @@ function ProductPage() {
                   <dd className="mt-1 font-semibold text-navy">{dim}</dd>
                 </div>
               )}
-              {packaging && (
+              {packageInfo && (
                 <div className="rounded-xl bg-secondary/60 p-3 sm:col-span-2">
                   <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Embalagem comercial</dt>
-                  <dd className="mt-1 font-semibold text-navy">{packaging}</dd>
+                  <dd className="mt-1 font-semibold text-navy">{packageInfo}</dd>
                 </div>
               )}
             </dl>
           </div>
         )}
 
-        {p.specs.length > 0 && <Block title="Especificações técnicas" items={p.specs} />}
-        {p.variations.length > 0 && <Block title="Variações de tamanho e modelo" items={p.variations} />}
-        {p.packUnit && <Block title="Quantidade por pacote / caixa" items={[p.packUnit]} />}
-        <Block title="Aplicações" items={p.applications} />
+        {publicSections.filter(section => section.title !== 'Variações de tamanho e modelo' && section.title !== 'Unidade comercial')
+          .map(section => <Block key={section.title} title={section.title} items={section.items} />)}
+        {variations.length > 0 && (
+          <fieldset className="mt-6 border-t border-border pt-5">
+            <legend className="text-sm font-bold text-navy">Selecione tamanho ou modelo</legend>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {variations.map(variation => (
+                <button
+                  key={variation}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected === variation}
+                  onClick={() => setSelectedVariation(variation)}
+                  className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${selected === variation ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-navy hover:bg-secondary'}`}
+                >
+                  {variation}
+                </button>
+              ))}
+            </div>
+            {variations.length > 1 && !selected && <p className="mt-2 text-sm text-muted-foreground">Escolha uma opção para adicionar à cotação.</p>}
+          </fieldset>
+        )}
         <div className="mt-8 flex flex-wrap gap-3">
-          <Button onClick={() => add(p.slug, p.name)} disabled={has(p.slug)} className="rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground hover:bg-navy-soft disabled:bg-gold disabled:text-navy">
-            {has(p.slug) ? "✓ Adicionado à lista" : "Solicitar cotação"}
+          <Button onClick={() => add(p, selected || undefined)} disabled={!isQuoteVariationSelectionValid(variations, selected) || alreadyAdded} className="rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground hover:bg-navy-soft disabled:bg-gold disabled:text-navy">
+            {alreadyAdded ? "✓ Adicionado à lista" : "Solicitar cotação"}
           </Button>
           <Link to="/orcamento" className="rounded-full border border-primary px-6 py-3 font-semibold text-primary">Ver lista de orçamento</Link>
         </div>

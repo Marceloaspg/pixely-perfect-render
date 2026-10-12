@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, LogOut, Pencil, Upload, Save, Search, Image as ImageIcon, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { ImageCropDialog } from '@/components/admin/ImageCropDialog';
 import { getAdminRouteErrorKind, getAdminRouteErrorMessage } from '@/lib/admin-access';
+import { BannerManager } from '@/components/admin/BannerManager';
 
 const adminQuery=queryOptions({queryKey:['admin-catalog'],queryFn:()=>getAdminCatalog()});
 
@@ -388,7 +389,7 @@ function Admin(){
     </header>
 
     <div className="my-8 flex flex-wrap gap-2">
-      {['Produtos','Categorias','Contato','Orçamentos'].map(t=>(
+      {['Produtos','Categorias','Banners e Campanhas','Contato','Orçamentos'].map(t=>(
         <Button key={t} disabled={busy} variant={tab===t?'default':'secondary'} onClick={async()=>{if(edit)await cancelEditor();setTab(t);setMessage('');}}>
           {t}
         </Button>
@@ -400,6 +401,8 @@ function Admin(){
         {message}
       </div>
     )}
+
+    {tab==='Banners e Campanhas' && !edit && <BannerManager products={data.catalog.products} />}
 
     {/* ABA PRODUTOS - LISTAGEM */}
     {tab==='Produtos' && !edit && (

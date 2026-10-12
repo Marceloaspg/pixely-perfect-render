@@ -8,3 +8,4 @@
 - [x] Preservar layout e reduzir todas as superfícies públicas às sete categorias solicitadas, sem apagar registros reais.
 - [x] Atualizar subtítulo para Amparo e região e botão Ver produtos nas categorias.
 - [x] Etapa B local: categorias dinâmicas, subcategorias visuais, ativação e reordenação persistida sem alteração remota do banco.
+- [x] Etapa C.2 local: carrossel da página inicial, gestão de banners/campanhas e migração SQL preparada; aplicação no Supabase remoto pendente de revisão e autorização.

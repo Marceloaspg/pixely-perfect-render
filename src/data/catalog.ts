@@ -46,7 +46,7 @@ export const productDataSchema = z.object({
     .refine(paths => new Set(paths).size === paths.length, 'A galeria não pode conter caminhos repetidos.'),
 });
 export type Category = z.infer<typeof categoryDataSchema> & {slug:string;image:string;active:boolean};
-export type Product = z.infer<typeof productDataSchema> & {slug:string;category:string;image:string;additionalImages:string[];active:boolean};
+export type Product = z.infer<typeof productDataSchema> & {slug:string;category:string;image:string;imageAvailable?:boolean;additionalImages:string[];active:boolean};
 export const contactSchema = z.object({whatsapp:z.string().regex(/^\d{10,15}$/),email:z.union([z.string().email(),z.literal('')]),instagram:z.union([z.string().url(),z.literal('')]),facebook:z.union([z.string().url(),z.literal('')])});
 export type SiteConfig = z.infer<typeof contactSchema>;
 export type CatalogData = { categories:Category[];products:Product[];config:SiteConfig };
