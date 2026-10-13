@@ -76,71 +76,6 @@ export type Database = {
         }
         Relationships: []
       }
-      homepage_banners: {
-        Row: {
-          active: boolean
-          archived_at: string | null
-          button_href: string
-          button_label: string
-          created_at: string
-          display_order: number
-          ends_at: string | null
-          id: string
-          image_path: string | null
-          mobile_image_path: string | null
-          product_slug: string | null
-          starts_at: string | null
-          subtitle: string
-          title: string
-          type: "institutional" | "campaign" | "product"
-          updated_at: string
-        }
-        Insert: {
-          active?: boolean
-          archived_at?: string | null
-          button_href?: string
-          button_label?: string
-          created_at?: string
-          display_order?: number
-          ends_at?: string | null
-          id?: string
-          image_path?: string | null
-          mobile_image_path?: string | null
-          product_slug?: string | null
-          starts_at?: string | null
-          subtitle?: string
-          title: string
-          type: "institutional" | "campaign" | "product"
-          updated_at?: string
-        }
-        Update: {
-          active?: boolean
-          archived_at?: string | null
-          button_href?: string
-          button_label?: string
-          created_at?: string
-          display_order?: number
-          ends_at?: string | null
-          id?: string
-          image_path?: string | null
-          mobile_image_path?: string | null
-          product_slug?: string | null
-          starts_at?: string | null
-          subtitle?: string
-          title?: string
-          type?: "institutional" | "campaign" | "product"
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "homepage_banners_product_slug_fkey"
-            columns: ["product_slug"]
-            isOneToOne: false
-            referencedRelation: "catalog_products"
-            referencedColumns: ["slug"]
-          },
-        ]
-      }
       quote_requests: {
         Row: {
           contact: Json
@@ -194,12 +129,6 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
-      }
-      reorder_homepage_banners: {
-        Args: {
-          _ids: string[]
-        }
-        Returns: undefined
       }
     }
     Enums: {
