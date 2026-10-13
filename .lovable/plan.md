@@ -1,20 +1,20 @@
 # Aplicar a migração 0002_homepage_banners
 
 ## Estado confirmado
-- O arquivo `drizzle/migrations/0002_homepage_banners.sql` existe na branch e está registrado no journal do Drizzle (índice 2, após 0000 e 0001).
-- A tabela `public.homepage_banners` **não existe** no banco (verificado com consulta direta).
-- Ou seja: a migração foi versionada, mas nunca aplicada ao banco.
+- O arquivo `drizzle/migrations/0002_homepage_banners.sql` existe na branch e está no journal do Drizzle (índice 2, após 0000 e 0001).
+- A tabela `public.homepage_banners` **não existe** no banco (verificado por consulta direta): a migração foi versionada, mas nunca aplicada.
 
-## Plano
-1. Ler o conteúdo completo de `drizzle/migrations/0002_homepage_banners.sql`.
-2. Aplicar **exclusivamente** esse SQL pelo mecanismo oficial do projeto (ferramenta de migração do Lovable Cloud), sem recriar, sem reaplicar 0000/0001 e sem tocar em dados existentes — a migração é apenas DDL de criação (tabela, políticas de acesso, função de reordenação), sem alteração de dados.
-3. Verificar o resultado:
-   - confirmar que a tabela `public.homepage_banners` passou a existir;
-   - confirmar o número de migrações registradas no histórico do Drizzle (esperado: 3).
-4. Regenerar os tipos do banco, se necessário, para o código do painel de banners compilar contra o novo schema.
-5. Reportar: resultado da execução, existência da tabela e total de migrações registradas.
+## Plano (aprovado pelo usuário)
+1. Aplicar **exclusivamente** o SQL de `drizzle/migrations/0002_homepage_banners.sql`, byte a byte, pela ferramenta oficial de migração do Lovable Cloud — sem recriar, sem reaplicar 0000/0001, sem gerar segunda migração equivalente.
+2. A execução é transacional: em caso de falha, nada fica parcialmente aplicado e o arquivo/journal são revertidos.
+3. A migração contém apenas DDL (tabela, índices, grants, RLS, políticas, função de reordenação, trigger) — nenhum dado existente é alterado.
+4. Verificar e reportar:
+   - existência de `public.homepage_banners`;
+   - total de migrações registradas no Drizzle (esperado: 3);
+   - resultado da execução e eventuais erros.
+5. Os tipos TypeScript (`src/integrations/supabase/types.ts`) já incluem `homepage_banners` (gerados anteriormente); só serão regenerados se a ferramenta indicar divergência, com explicação.
 
 ## Garantias
-- Nenhum dado existente será alterado (a migração não contém INSERT/UPDATE/DELETE em tabelas de dados).
+- Nenhum dado existente será alterado.
 - Nenhuma migração anterior será reaplicada.
-- Se a aplicação falhar, nada fica parcialmente aplicado e o impedimento será explicado.
+- Nenhum arquivo do projeto será modificado desnecessariamente.
