@@ -10,8 +10,10 @@ describe("buildQuoteMessage", () => {
       ],
       { nome: "Ana", empresa: "Burger X", cidade: "Santos" },
     );
-    expect(msg).toContain("Produto: Caixa para hambúrguer\nQuantidade: 500 unidades");
-    expect(msg).toContain("Produto: Papel toalha interfolha\nQuantidade: 10 pacotes");
+    expect(msg).toContain("1. Caixa para hambúrguer");
+    expect(msg).toContain("Embalagens solicitadas: 500 unidades");
+    expect(msg).toContain("2. Papel toalha interfolha");
+    expect(msg).toContain("Embalagens solicitadas: 10 pacotes");
     expect(msg).toContain("Empresa: Burger X");
   });
 });

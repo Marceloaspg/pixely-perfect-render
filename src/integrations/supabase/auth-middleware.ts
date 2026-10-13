@@ -3,9 +3,15 @@ import { createMiddleware } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from './types'
+import {
+  AuthenticationRequiredError,
+  isAuthenticationRejection,
+  SupabaseServiceUnavailableError,
+} from '@/lib/admin-access'
 
-
-
+function safeErrorName(error: unknown): string {
+  return error instanceof Error ? error.name : 'unknown';
+}
 
 function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith('sb_publishable_') || value.startsWith('sb_secret_');
@@ -44,33 +50,34 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       ];
       const message = `Missing Supabase environment variable(s): ${missing.join(', ')}. Connect Supabase in Lovable Cloud.`;
       console.error(`[Supabase] ${message}`);
-      throw new Error(message);
+      throw new SupabaseServiceUnavailableError();
     }
     
     const request = getRequest();
 
     if (!request?.headers) {
-      throw new Error('Unauthorized: No request headers available');
+      console.error('[Supabase auth] Request headers are unavailable.');
+      throw new SupabaseServiceUnavailableError();
     }
 
 
     const authHeader = request.headers.get('authorization');
 
     if (!authHeader) {
-      throw new Error('Unauthorized: No authorization header provided');
+      throw new AuthenticationRequiredError();
     }
 
     if (!authHeader.startsWith('Bearer ')) {
-      throw new Error('Unauthorized: Only Bearer tokens are supported');
+      throw new AuthenticationRequiredError();
     }
 
     const token = authHeader.replace('Bearer ', '');
     if (!token) {
-      throw new Error('Unauthorized: No token provided');
+      throw new AuthenticationRequiredError();
     }
 
     if (token.split('.').length !== 3) {
-      throw new Error('Unauthorized: Invalid token');
+      throw new AuthenticationRequiredError();
     }
 
     const supabase = createClient<Database>(
@@ -91,13 +98,25 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       }
     );
 
-    const { data, error } = await supabase.auth.getClaims(token);
-    if (error || !data?.claims) {
-      throw new Error('Unauthorized: Invalid token');
+    let claimsResult: Awaited<ReturnType<typeof supabase.auth.getClaims>>;
+    try {
+      claimsResult = await supabase.auth.getClaims(token);
+    } catch (error) {
+      console.error('[Supabase auth] Token verification request failed.', { errorType: safeErrorName(error) });
+      throw new SupabaseServiceUnavailableError();
+    }
+    const { data, error } = claimsResult;
+    if (error) {
+      if (isAuthenticationRejection(error)) throw new AuthenticationRequiredError();
+      console.error('[Supabase auth] Token verification service failed.', { errorType: safeErrorName(error) });
+      throw new SupabaseServiceUnavailableError();
+    }
+    if (!data?.claims) {
+      throw new AuthenticationRequiredError();
     }
 
     if (!data.claims.sub) {
-      throw new Error('Unauthorized: No user ID found in token');
+      throw new AuthenticationRequiredError();
     }
 
     return next({

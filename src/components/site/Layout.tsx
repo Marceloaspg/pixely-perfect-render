@@ -103,7 +103,10 @@ export function PageHero({ eyebrow, title, text }: { eyebrow: string; title: str
 
 export function ProductCard({ p }: { p: Product }) {
   const { add, has } = useQuote();
-  const inList = has(p.slug);
+  const variations = [...new Set(p.variations.map(value => value.trim()).filter(Boolean))];
+  const hasMultipleVariations = variations.length > 1;
+  const selectedVariation = variations.length === 1 ? variations[0] : undefined;
+  const inList = has(p.slug, selectedVariation);
   return (
     <article className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-card transition hover:-translate-y-1">
       <Link to="/produtos/$slug" params={{ slug: p.slug }} className="relative block aspect-[5/4] overflow-hidden bg-muted">
@@ -113,9 +116,15 @@ export function ProductCard({ p }: { p: Product }) {
       <div className="flex flex-1 flex-col p-5">
         <Link to="/produtos/$slug" params={{ slug: p.slug }} className="font-bold text-navy hover:underline">{p.name}</Link>
         <p className="mt-1 flex-1 text-sm text-muted-foreground">{p.description}</p>
-        <Button variant="quote" onClick={() => add(p.slug, p.name)} disabled={inList} className="mt-4 rounded-full border border-primary px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground disabled:border-gold disabled:bg-gold/15 disabled:text-navy">
-          {inList ? "✓ Na lista de orçamento" : "Solicitar cotação"}
-        </Button>
+        {hasMultipleVariations ? (
+          <Link to="/produtos/$slug" params={{ slug: p.slug }} className="mt-4 inline-flex justify-center rounded-full border border-primary px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground">
+            Selecionar tamanho/modelo
+          </Link>
+        ) : (
+          <Button variant="quote" onClick={() => add(p, selectedVariation)} disabled={inList} className="mt-4 rounded-full border border-primary px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground disabled:border-gold disabled:bg-gold/15 disabled:text-navy">
+            {inList ? "✓ Na lista de orçamento" : "Solicitar cotação"}
+          </Button>
+        )}
       </div>
     </article>
   );
