@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { filterPublicCatalog } from "@/data/catalog";
 import { useCatalog } from "@/lib/catalog-context";
 import { getHomepageBanners, getHomepageFeaturedProductSlugs } from "@/lib/catalog.functions";
 import { buildHomepageSlides } from "@/lib/homepage-banners";
@@ -24,10 +25,11 @@ export function HomepageCarousel() {
   const { data: banners = [] } = useQuery(publicBannersQuery);
   const { data: featuredProductSlugs = [] } = useQuery(publicFeaturedProductsQuery);
   const { products, categories } = useCatalog();
+  const publicCatalog = filterPublicCatalog(categories, products);
   const slides = buildHomepageSlides(
     banners,
-    products,
-    categories,
+    publicCatalog.products,
+    publicCatalog.categories,
     Date.now(),
     new Set(featuredProductSlugs),
     false,

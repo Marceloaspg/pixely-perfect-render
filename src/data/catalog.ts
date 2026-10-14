@@ -72,8 +72,19 @@ export function filterPublicCatalog(categories: Category[], products: Product[])
   const visibleCategorySlugs = new Set(visibleCategories.map(category => category.slug));
   return {
     categories: visibleCategories,
-    products: products.filter(product => product.active && visibleCategorySlugs.has(product.category)),
+    products: products.filter(product =>
+      product.active &&
+      !product.demo &&
+      visibleCategorySlugs.has(product.category)
+    ),
   };
+}
+export function selectCatalogAudience(
+  categories: Category[],
+  products: Product[],
+  admin: boolean,
+): { categories: Category[]; products: Product[] } {
+  return admin ? { categories, products } : filterPublicCatalog(categories, products);
 }
 export const applications = ['Delivery','Consumo no local','Lanches'];
 export const segments = [

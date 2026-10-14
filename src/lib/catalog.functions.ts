@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
 import type { Database, Json } from '@/integrations/supabase/types';
-import { categoryDataSchema, categorySlugSchema, filterPublicCatalog, productDataSchema, contactSchema, sortCategories, type CatalogData } from '@/data/catalog';
+import { categoryDataSchema, categorySlugSchema, selectCatalogAudience, productDataSchema, contactSchema, sortCategories, type CatalogData } from '@/data/catalog';
 import { collectReferencedImagePaths, findUnreferencedImagePaths, uploadValidatedImage } from '@/lib/product-images';
 import { verifyAdminRole, SupabaseServiceUnavailableError } from '@/lib/admin-access';
 import { applySignedCatalogImageUrls, signCatalogImagePaths } from '@/lib/catalog-image-signing';
@@ -21,7 +21,7 @@ async function readCatalog(db:ReturnType<typeof createClient<Database>>,admin:bo
  if(cats.error||ps.error||cs.error) throw new Error('Não foi possível carregar o catálogo.');
  const categories=(cats.data??[]).map(r=>({...categoryDataSchema.parse(r.data),slug:r.slug,active:r.active,image:''}));
  const products=(ps.data??[]).map(r=>({...productDataSchema.parse(r.data),slug:r.slug,category:r.category,active:r.active,image:'',additionalImages:[] as string[]}));
- const visible=admin?{categories,products}:filterPublicCatalog(categories,products);
+ const visible=selectCatalogAudience(categories,products,admin);
  const imagePaths=[...new Set([
   ...visible.categories.map(category=>category.imagePath),
   ...visible.products.flatMap(product=>[product.imagePath,...product.additionalImagePaths]),
@@ -388,46 +388,4 @@ export const removeUnreferencedCatalogImages=createServerFn({method:'POST'}).mid
  const result=await context.supabase.storage.from('catalog-images').remove(data.paths);
  if(result.error)throw new Error(`Não foi possível remover os uploads temporários: ${result.error.message}`);
  return {ok:true};
-});
-const quoteRequestInput=z.object({
- requestKey:z.string().uuid(),
- contact:z.object({
-  nome:z.string().trim().min(1).max(100),
-  empresa:z.string().trim().max(100).optional().default(''),
-  cidade:z.string().trim().min(1).max(100),
-  whatsapp:z.string().trim().min(1).max(30),
-  observations:z.string().trim().max(1000).optional().default(''),
- }),
- items:z.array(z.object({
-  id:z.string().optional(),
-  slug:z.string().min(1).max(120),
-  name:z.string().trim().min(1).max(120),
-  quantity:z.string().trim().regex(/^\d+(?:[.,]\d+)?$/).max(30)
-   .refine(value=>Number(value.replace(',','.'))>0,'A quantidade deve ser maior que zero.'),
-  variationId:z.string().max(300).optional(),
-  variation:z.string().max(120).optional(),
-  sku:z.string().max(60).optional(),
-  material:z.string().max(120).optional(),
-  dimensions:z.string().max(100).optional(),
-  packageQuantity:z.number().int().positive().nullable().optional(),
-  packageType:z.string().max(20).optional(),
-  packUnit:z.string().max(120).optional(),
- })).min(1).max(100),
-});
-export const saveQuote=createServerFn({method:'POST'}).inputValidator((value:unknown)=>quoteRequestInput.parse(value)).handler(async({data})=>{
- try{
-  const {supabaseAdmin}=await import('@/integrations/supabase/client.server');
-  const result=await supabaseAdmin.from('quote_requests').upsert(
-   {request_key:data.requestKey,contact:data.contact,items:data.items},
-   {onConflict:'request_key',ignoreDuplicates:true},
-  );
-  if(result.error)throw result.error;
-  return {saved:true};
- }catch(error){
-  console.error('[Quote] Não foi possível registrar a solicitação.',{
-   errorType:error instanceof Error?error.name:'unknown',
-   status:typeof error==='object'&&error!==null&&'status' in error&&typeof error.status==='number'?error.status:undefined,
-  });
-  return {saved:false};
- }
 });

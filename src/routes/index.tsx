@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Layers, Headphones, ClipboardCheck, Store } from "lucide-react";
 import hero from "@/assets/hero.jpg";
+import { filterPublicCatalog } from "@/data/catalog";
 import { useCatalog } from "@/lib/catalog-context";
 import { whatsappLink } from "@/lib/config";
 import { FeaturedProductsCarousel } from "@/components/site/FeaturedProductsCarousel";
@@ -48,13 +49,14 @@ const perks = [
   },
   {
     icon: Store,
-    title: "Para diversos segmentos",
+    title: "Para o seu negócio",
     text: "Hamburguerias, lanchonetes, hot dog e delivery.",
   },
 ];
 
 function Index() {
   const { categories, config } = useCatalog();
+  const publicCategories = filterPublicCatalog(categories, []).categories;
   return (
     <>
       <section className="relative overflow-hidden bg-navy">
@@ -67,17 +69,17 @@ function Index() {
         />
         <div className="absolute inset-0 bg-gradient-to-r from-navy via-navy/85 to-navy/10" />
         <div className="relative mx-auto max-w-7xl px-5 py-24 md:py-36">
-          <div className="max-w-2xl animate-rise text-primary-foreground">
-            <p className="text-xs font-bold uppercase tracking-[0.3em] text-gold">
+          <div className="mx-auto max-w-2xl animate-rise text-center text-primary-foreground md:mx-0 md:text-left">
+            <p className="text-center text-xs font-bold uppercase tracking-[0.3em] text-gold md:text-left">
               A embalagem certa valoriza o seu negócio
             </p>
-            <h1 className="mt-5 text-4xl font-extrabold leading-[1.05] tracking-tight md:text-6xl">
+            <h1 className="mt-5 text-center text-4xl font-extrabold leading-[1.05] tracking-tight md:text-left md:text-6xl">
               Embalagens que valorizam seu produto e fortalecem seu negócio.
             </h1>
-            <p className="mt-6 text-lg text-primary-foreground/80">
+            <p className="mt-6 text-center text-lg text-primary-foreground/80 md:text-left">
               Soluções em embalagens para hamburguerias, lanchonetes e delivery em Amparo e região.
             </p>
-            <div className="mt-9 flex flex-wrap gap-3">
+            <div className="mt-9 flex flex-wrap justify-center gap-3 md:justify-start">
               <Link
                 to="/produtos"
                 className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3.5 font-bold text-navy transition hover:brightness-105"
@@ -99,12 +101,12 @@ function Index() {
       <HomepageCarousel />
 
       <section className="mx-auto max-w-7xl px-5 py-20">
-        <p className="text-xs font-bold uppercase tracking-[0.3em] text-gold">Catálogo</p>
-        <h2 className="mt-2 max-w-2xl text-3xl font-extrabold tracking-tight text-navy md:text-4xl">
+        <p className="text-center text-xs font-bold uppercase tracking-[0.3em] text-gold md:text-left">Catálogo</p>
+        <h2 className="mx-auto mt-2 max-w-2xl text-center text-3xl font-extrabold tracking-tight text-navy md:mx-0 md:text-left md:text-4xl">
           Encontre a embalagem ideal para o seu negócio.
         </h2>
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {categories.map((c) => (
+          {publicCategories.map((c) => (
             <Link
               key={c.slug}
               to="/categorias/$slug"
@@ -121,11 +123,11 @@ function Index() {
                   className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                 />
               </div>
-              <div className="p-5">
+              <div className="p-5 text-center sm:text-left">
                 <span className="text-xs font-bold text-gold">{c.number}</span>
                 <h3 className="mt-1 font-bold text-navy">{c.name}</h3>
                 <p className="mt-1 text-sm text-muted-foreground">{c.description}</p>
-                <span className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-primary">
+                <span className="mt-4 inline-flex items-center justify-center gap-2 text-sm font-bold text-primary sm:justify-start">
                   Ver produtos <ArrowRight className="h-4 w-4" />
                 </span>
               </div>
@@ -137,7 +139,7 @@ function Index() {
       <section className="bg-secondary">
         <div className="mx-auto grid max-w-7xl gap-6 px-5 py-20 sm:grid-cols-2 lg:grid-cols-4">
           {perks.map((p) => (
-            <div key={p.title} className="rounded-2xl bg-card p-7 shadow-card">
+            <div key={p.title} className="flex flex-col items-center rounded-2xl bg-card p-7 text-center shadow-card md:items-start md:text-left">
               <p.icon className="h-8 w-8 text-gold" />
               <h3 className="mt-4 font-bold text-navy">{p.title}</h3>
               <p className="mt-2 text-sm text-muted-foreground">{p.text}</p>

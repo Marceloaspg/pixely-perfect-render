@@ -157,12 +157,13 @@ function ProductPage() {
             {variations.length > 1 && !selected && <p className="mt-2 text-sm text-muted-foreground">Escolha uma opção para adicionar à cotação.</p>}
           </fieldset>
         )}
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Button onClick={() => add(p, selected || undefined)} disabled={!isQuoteVariationSelectionValid(variations, selected) || alreadyAdded} className="rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground hover:bg-navy-soft disabled:bg-gold disabled:text-navy">
+        <div className="mt-8 grid gap-3 sm:grid-cols-2">
+          <Button onClick={() => add(p, selected || undefined)} disabled={!isQuoteVariationSelectionValid(variations, selected) || alreadyAdded} className="h-12 w-full justify-center whitespace-nowrap rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-navy-soft disabled:bg-gold disabled:text-navy">
             {alreadyAdded ? "✓ Adicionado à lista" : "Solicitar cotação"}
           </Button>
-          <Link to="/orcamento" className="rounded-full border border-primary px-6 py-3 font-semibold text-primary">Ver lista de orçamento</Link>
+          <Link to="/orcamento" className="inline-flex h-12 w-full items-center justify-center whitespace-nowrap rounded-full border border-primary px-4 text-sm font-semibold text-primary">Ver lista de orçamento</Link>
         </div>
+        <Link to="/produtos" className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-full border border-border bg-secondary px-4 text-sm font-semibold text-navy transition hover:bg-secondary/70">Continuar comprando</Link>
       </div>
     </section>
   );

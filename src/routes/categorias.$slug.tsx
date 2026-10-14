@@ -34,7 +34,7 @@ function CategoryPage() {
         <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Linhas desta categoria</h2>
         <ul className="mt-3 flex flex-wrap gap-2">{c.subcategories.map((s) => <li key={s} className="rounded-full border border-border px-4 py-1.5 text-sm">{s}</li>)}</ul>
         <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">{list.map((p) => <ProductCard key={p.slug} p={p} />)}</div>
-        <p className="mt-8 text-sm text-muted-foreground">Os produtos exibidos são exemplos. Consulte a disponibilidade solicitando um orçamento.</p>
+        {list.length === 0 && <p className="mt-8 text-sm text-muted-foreground">Não há produtos publicados nesta categoria no momento.</p>}
       </section>
     </>
   );

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { allowedCategories, assertAdminRole, categoryDataSchema, categorySlugSchema, filterPublicCatalog, segments, productDataSchema, slugify, sortCategories } from './catalog';
+import { allowedCategories, assertAdminRole, categoryDataSchema, categorySlugSchema, filterPublicCatalog, selectCatalogAudience, segments, productDataSchema, slugify, sortCategories } from './catalog';
 import { AdminPermissionDeniedError, AdminRoleCheckError } from '@/lib/admin-access';
 
 it('exposes exactly the seven requested categories',()=>{expect([...allowedCategories]).toEqual(['embalagens-para-hamburguer','sacos-kraft-e-sacolas','papeis-para-alimentos','embalagens-para-batatas-e-porcoes','embalagens-para-hot-dog','embalagens-para-combos','etiquetas-e-lacres-de-seguranca']);});
@@ -89,6 +89,19 @@ it('excludes inactive categories and their products from every public catalog su
   const publicCatalog = filterPublicCatalog(categories, products);
   expect(publicCatalog.categories.map(category => category.slug)).toEqual(['ativa']);
   expect(publicCatalog.products.map(product => product.slug)).toEqual(['produto-ativo']);
+});
+
+it('excludes demonstrative products publicly while keeping them visible to administrators', () => {
+  const categories = [
+    { ...categoryDataSchema.parse({ name: 'Ativa' }), slug: 'ativa', image: '', active: true },
+  ];
+  const products = [
+    { ...productDataSchema.parse({ name: 'Produto real', description: '' }), slug: 'real', category: 'ativa', image: '', additionalImages: [], active: true },
+    { ...productDataSchema.parse({ name: 'Produto demonstrativo', description: '', demo: true }), slug: 'demo', category: 'ativa', image: '', additionalImages: [], active: true },
+    { ...productDataSchema.parse({ name: 'Produto inativo', description: '' }), slug: 'inativo', category: 'ativa', image: '', additionalImages: [], active: false },
+  ];
+  expect(selectCatalogAudience(categories, products, false).products.map(product => product.slug)).toEqual(['real']);
+  expect(selectCatalogAudience(categories, products, true).products.map(product => product.slug)).toEqual(['real', 'demo', 'inativo']);
 });
 
 it('rejects writes when the server role check errors or is not an administrator', () => {
