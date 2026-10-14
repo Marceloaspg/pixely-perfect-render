@@ -97,15 +97,23 @@ describe("quote page actions", () => {
     localStorage.clear();
   });
 
-  it("continues to products without changing saved quote quantities or variations", () => {
+  it.each([320, 375, 390])("keeps both buttons within the available width at %i px and preserves the quote", width => {
+    window.innerWidth = width;
     render(<QuotePage />);
 
     expect(screen.getByRole("combobox", { name: "Tamanho ou modelo de Caixa para delivery" })).toHaveValue("Grande");
     expect(screen.getByRole("textbox", { name: "Quantidade de Caixa para delivery Grande" })).toHaveValue("12");
     const continueLink = screen.getByRole("link", { name: "Continuar comprando" });
+    const buttons = [
+      continueLink,
+      screen.getByRole("button", { name: "Continuar pelo WhatsApp" }),
+    ];
     expect(continueLink).toHaveAttribute("href", "/produtos");
-    expect(continueLink).toHaveClass("w-full", "max-w-sm");
-    expect(continueLink.parentElement).toHaveClass("flex-col", "sm:flex-row");
+    expect(continueLink.parentElement).toHaveClass("grid-cols-1", "sm:grid-cols-2", "lg:grid-cols-1");
+    for (const button of buttons) {
+      expect(button).toHaveClass("w-full", "min-w-0", "max-w-full", "whitespace-normal");
+      expect(button).toHaveClass("h-12");
+    }
 
     fireEvent.click(continueLink);
 

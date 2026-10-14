@@ -129,11 +129,11 @@ export function QuotePage() {
             </label>
           </div>
           {validationError && <p role="alert" className="mt-4 text-sm">{validationError}</p>}
-          <div className="mt-5 flex flex-col items-center gap-3 sm:flex-row sm:items-stretch">
-            <Button asChild variant="outline" className="h-12 w-full max-w-sm rounded-full border-primary-foreground/35 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground sm:flex-1">
+          <div className="mt-5 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <Button asChild variant="outline" className="h-12 w-full min-w-0 max-w-full rounded-full border-primary-foreground/35 bg-transparent px-3 text-center leading-tight whitespace-normal text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground">
               <Link to="/produtos"><ArrowLeft aria-hidden="true" />Continuar comprando</Link>
             </Button>
-            <Button variant="gold" disabled={!!validationError} onClick={send} className="h-12 w-full max-w-sm rounded-full font-semibold sm:flex-[1.35]">Continuar pelo WhatsApp</Button>
+            <Button variant="gold" disabled={!!validationError} onClick={send} className="h-12 w-full min-w-0 max-w-full rounded-full px-3 text-center leading-tight whitespace-normal font-semibold">Continuar pelo WhatsApp</Button>
           </div>
           {error && <p role="alert" className="mt-3 text-sm">{error}</p>}
           {status && <p role="status" className="mt-3 text-sm">{status}</p>}

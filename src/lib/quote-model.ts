@@ -344,7 +344,7 @@ export function buildQuoteMessage(items: QuoteItem[], contact: QuoteContact): st
     const unit = commercialQuantityUnit(item);
     quantitiesByUnit.set(unit, [...(quantitiesByUnit.get(unit) ?? []), item.quantity]);
   }
-  const distinctProducts = new Set(items.map(item => item.slug)).size;
+  const distinctProducts = new Set(items.map(item => item.sku?.trim().toLocaleUpperCase('pt-BR') || item.slug)).size;
   lines.push(
     '',
     '---',
@@ -362,16 +362,7 @@ export function buildQuoteMessage(items: QuoteItem[], contact: QuoteContact): st
       lines.push(`- *${sumQuantities(quantities)} ${unit}*`);
     }
   }
-  lines.push(
-    '',
-    '*INFORMAÇÕES DESEJADAS*',
-    '',
-    '- Valores dos produtos',
-    '- Disponibilidade em estoque',
-    '- Prazo e condições de entrega',
-    '- Formas de pagamento',
-    '- Quantidade mínima para pedido',
-  );
+  lines.push('');
   addIfPresent(lines, 'Observações', contact.observations);
   lines.push(
     '',

@@ -237,6 +237,8 @@ it('prepares a WhatsApp message from canonical catalog data without personal con
   expect(prepared.message).toContain('Quantidade: *4 caixas*');
   expect(prepared.message).toContain('Produtos diferentes: *1*');
   expect(prepared.message).toContain('Quantidade total: *4 caixas*');
+  expect(prepared.message).toContain('*MAJESTA EMBALAGENS*\n*SOLICITAÇÃO DE ORÇAMENTO*\n\nOlá!\n\nGostaria de solicitar uma cotação dos seguintes produtos:\n\n---\n\n*01. Caixa oficial*');
+  expect(prepared.message).not.toContain('*INFORMAÇÕES DESEJADAS*');
   expect(prepared.message).toContain('---');
   expect(prepared.message).toContain('Observações: Entregar cotação para o setor de compras.');
   expect(prepared.message.match(/(?:[#*0-9]\uFE0F?\u20E3)|[\p{Extended_Pictographic}\p{Emoji_Presentation}\p{Regional_Indicator}\uFE0F\u20E3\u200D\u{1F3FB}-\u{1F3FF}]/gu)).toBeNull();
@@ -337,12 +339,9 @@ it('builds a complete single-product message and omits unavailable product field
   expect(message).toContain('Material: Papel cartão');
   expect(message).toContain('Quantidade: *4 caixas*');
   expect(message).toContain('*RESUMO DA SOLICITAÇÃO*');
-  expect(message).toContain('*INFORMAÇÕES DESEJADAS*');
-  expect(message).toContain('- Valores dos produtos');
-  expect(message).toContain('- Disponibilidade em estoque');
-  expect(message).toContain('- Prazo e condições de entrega');
-  expect(message).toContain('- Formas de pagamento');
-  expect(message).toContain('- Quantidade mínima para pedido');
+  expect(message).not.toContain('*INFORMAÇÕES DESEJADAS*');
+  expect(message).not.toContain('- Valores dos produtos');
+  expect(message).toContain('*RESUMO DA SOLICITAÇÃO*\n\nProdutos diferentes: *1*\nQuantidade total: *4 caixas*\n\nObservações: Entregar cotação para o setor de compras.\n\nAgradeço pela atenção e aguardo o retorno com a proposta comercial!');
   expect(message).toContain('Agradeço pela atenção e aguardo o retorno com a proposta comercial!');
   expect(message).not.toContain('Ana Costa');
   expect(message).not.toContain('Majesta Cliente Teste');
@@ -406,6 +405,31 @@ it('adds quantities exactly for products sold in the same commercial unit', () =
     { slug: 'caixa-b', name: 'Caixa B', quantity: '5', packageType: 'caixa' },
   ], contact);
   expect(message).toContain('Quantidade total: *15 caixas*');
+});
+
+it('counts different variations of the same SKU as one product and preserves optional details', () => {
+  const message = buildQuoteMessage([
+    { slug: 'batata-frita', name: 'Caixinha | Embalagem para Batata Frita', quantity: '10', variation: 'Kraft 10,2cm x 9,5cm x 3,2cm', sku: 'CB-EBP-01', material: 'Papel Cartão Triplex' },
+    { slug: 'batata-frita', name: 'Caixinha | Embalagem para Batata Frita', quantity: '10', variation: 'Branco 10,2cm x 9,5cm x 3,2cm', sku: 'CB-EBP-01', material: 'Papel Cartão Triplex' },
+  ], contact);
+  expect(message).toContain('*01. Caixinha | Embalagem para Batata Frita*\nCódigo: CB-EBP-01\nModelo: Kraft 10,2cm x 9,5cm x 3,2cm\nMaterial: Papel Cartão Triplex\nQuantidade: *10 embalagens*\n\n---\n\n*02. Caixinha | Embalagem para Batata Frita*');
+  expect(message).toContain('Modelo: Branco 10,2cm x 9,5cm x 3,2cm');
+  expect(message).toContain('Produtos diferentes: *1*');
+  expect(message).toContain('Quantidade total: *20 embalagens*');
+  expect(message).not.toContain('*INFORMAÇÕES DESEJADAS*');
+  expect(message).toContain('SOLICITAÇÃO DE ORÇAMENTO');
+  expect(message).not.toMatch(/[\p{Extended_Pictographic}\p{Emoji_Presentation}]/u);
+});
+
+it('omits unavailable SKU and material and counts products by stable slug', () => {
+  const message = buildQuoteMessage([
+    { slug: 'produto-1', name: 'Produto sem código', quantity: '2' },
+    { slug: 'produto-2', name: 'Outro produto', quantity: '3' },
+  ], contact);
+  expect(message).not.toContain('Código:');
+  expect(message).not.toContain('Material:');
+  expect(message).toContain('Produtos diferentes: *2*');
+  expect(message).toContain('Quantidade total: *5 embalagens*');
 });
 
 it('URL-encodes the complete message and uses the configured commercial number', () => {
