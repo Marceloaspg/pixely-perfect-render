@@ -33,7 +33,7 @@ function Catalog() {
 
   return (
     <>
-      <PageHero eyebrow="Produtos" title="Catálogo de embalagens e suprimentos" text="Produtos demonstrativos. Os itens oficiais e suas fotografias serão cadastrados em breve. Disponibilidade sob consulta." />
+      <PageHero eyebrow="Produtos" title="Catálogo de embalagens e suprimentos" text="Conheça nossas linhas de embalagens e suprimentos. Consulte nossa equipe para informações e orçamento." />
       <section className="mx-auto max-w-7xl px-5 py-12">
         <div className="grid gap-3 rounded-2xl border border-border bg-card p-4 shadow-card md:grid-cols-[1fr_auto_auto]">
           <label className="flex items-center gap-2 rounded-xl bg-secondary px-4">

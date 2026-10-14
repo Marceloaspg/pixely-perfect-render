@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import logo from "@/assets/majesta-logo.png.asset.json";
+import logo from "@/assets/majesta-logo.png";
 import { PageHero } from "@/components/site/Layout";
 
 export const Route = createFileRoute("/sobre")({
@@ -24,7 +24,7 @@ function About() {
           <p>Entendemos que uma boa embalagem vai além de proteger o alimento: ela também contribui para a apresentação do produto, a experiência do consumidor e a identidade de cada estabelecimento.</p>
           <p>Nosso objetivo é construir relacionamentos comerciais baseados em confiança, atendimento próximo e soluções adequadas às necessidades de cada cliente.</p>
         </div>
-        <img src={logo.url} alt="Majesta Embalagens" width={260} height={260} loading="lazy" className="mx-auto w-56 rounded-full shadow-card" />
+        <img src={logo} alt="Majesta Embalagens" width={260} height={260} loading="lazy" className="mx-auto w-56 rounded-full object-cover shadow-card" />
       </section>
     </>
   );

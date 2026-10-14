@@ -228,6 +228,17 @@ describe("server-side banner eligibility", () => {
 });
 
 describe("homepage slide eligibility", () => {
+  it("does not expose demo products through non-product banners linked to a product", () => {
+    expect(
+      buildHomepageSlides(
+        [banner({ productSlug: "caixa-delivery", type: "campaign" })],
+        [product({ demo: true })],
+        [category()],
+        now,
+      ),
+    ).toEqual([]);
+  });
+
   it("shows a single eligible banner and preserves admin banner priority", () => {
     expect(buildHomepageSlides([banner()], [], [category()], now).map((slide) => slide.id)).toEqual(
       ["10000000-0000-4000-8000-000000000001"],
@@ -268,6 +279,22 @@ describe("homepage slide eligibility", () => {
     );
     expect(slides.map((slide) => slide.id)).toEqual(["product:caixa-delivery"]);
     expect(buildHomepageSlides([], [product()], [category(false)], now)).toEqual([]);
+  });
+
+  it("does not reintroduce inactive, demo, or inactive-category products through linked banners", () => {
+    const linkedBanner = banner({ productSlug: "caixa-delivery" });
+    for (const hiddenProduct of [
+      product({ active: false }),
+      product({ demo: true }),
+      product({ category: "inativa" }),
+    ]) {
+      expect(
+        buildHomepageSlides([linkedBanner], [hiddenProduct], [category()], now),
+      ).toEqual([]);
+    }
+    expect(
+      buildHomepageSlides([linkedBanner], [product()], [category(false)], now),
+    ).toEqual([]);
   });
 
   it("uses the product image and link for product banners", () => {

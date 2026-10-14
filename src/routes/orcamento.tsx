@@ -1,14 +1,11 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
-import { useServerFn } from '@tanstack/react-start';
-import { saveQuote } from '@/lib/catalog.functions';
 import { useCatalog } from '@/lib/catalog-context';
 import { Button } from '@/components/ui/button';
 import { PageHero } from '@/components/site/Layout';
-import { buildQuoteMessage, quoteContactSchema, quoteItemKey, registerQuoteAndOpenWhatsApp, useQuote, validateQuoteRequest } from '@/lib/quote';
-import { calculateTotalUnits } from '@/lib/quote-model';
-import { whatsappLink } from '@/lib/config';
+import { quoteItemKey, useQuote, validateQuoteItemsAgainstCatalog, validateQuoteRequest } from '@/lib/quote';
+import { calculateTotalUnits, openWhatsAppQuote, prepareQuoteForWhatsApp } from '@/lib/quote-model';
 
 export const Route = createFileRoute('/orcamento')({
   head: () => ({
@@ -27,74 +24,25 @@ const field = 'h-11 w-full rounded-xl border border-input bg-background px-3 out
 function Quote() {
   const { items, remove, setQty, setVariation } = useQuote();
   const { config, products } = useCatalog();
-  const submitQuote = useServerFn(saveQuote);
-  const requestKey = useRef('');
-  const requestPayload = useRef('');
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
-  const [contact, setContact] = useState({ nome: '', empresa: '', cidade: '', whatsapp: '', observations: '' });
-  const validationError = validateQuoteRequest(items, contact);
+  const [contact, setContact] = useState({ nome: '', empresa: '', cidade: '', whatsapp: '', email: '', observations: '' });
+  const validationError = validateQuoteRequest(items, contact) ?? validateQuoteItemsAgainstCatalog(items, products);
 
-  async function send() {
-    const validation = validateQuoteRequest(items, contact);
-    const parsedContact = quoteContactSchema.safeParse(contact);
-    if (validation || !parsedContact.success) {
-      setError(validation || 'Revise seus dados de contato.');
-      return;
-    }
-    const unavailableItem = items.find(item => {
-      const product = products.find(candidate => candidate.slug === item.slug);
-      if (!product || !product.active) return true;
-      const options = [...new Set(product.variations.map(value => value.trim()).filter(Boolean))];
-      if (options.length > 1 && (!item.variation || !options.includes(item.variation))) return true;
-      return !!item.variation && !options.includes(item.variation);
-    });
-    if (unavailableItem) {
-      setError(`O produto "${unavailableItem.name}" ou sua variação não está mais disponível no catálogo. Revise a lista antes de continuar.`);
-      return;
-    }
-    const url = whatsappLink(buildQuoteMessage(items, parsedContact.data), config.whatsapp);
-    if (!url) {
-      setError('O número comercial do WhatsApp não está configurado corretamente. Sua lista foi preservada.');
+  function send() {
+    const prepared = prepareQuoteForWhatsApp(items, contact, products, config.whatsapp);
+    if (!prepared.ok) {
+      setError(prepared.error);
       return;
     }
 
-    const payload = JSON.stringify({ contact: parsedContact.data, items });
-    if (!requestKey.current || requestPayload.current !== payload) {
-      requestKey.current = crypto.randomUUID();
-      requestPayload.current = payload;
-    }
-    let tab: Window | null = null;
-    try {
-      tab = window.open('about:blank', '_blank');
-    } catch {
-      tab = null;
-    }
-    setBusy(true);
     setError('');
     setStatus('');
-    try {
-      const result = await registerQuoteAndOpenWhatsApp(
-        async () => submitQuote({ data: { requestKey: requestKey.current, contact: parsedContact.data, items } }),
-        () => {
-          if (tab && !tab.closed) tab.location.href = url;
-          else window.location.href = url;
-        },
-      );
-      if (result.opened) {
-        setStatus(result.registered
-          ? 'O WhatsApp foi aberto com a mensagem pronta; conclua o envio por lá. A solicitação também foi registrada.'
-          : 'O WhatsApp foi aberto com a mensagem pronta; conclua o envio por lá. Não foi possível registrar a solicitação no banco; sua lista continua salva neste navegador.');
-      } else {
-        tab?.close();
-        setError(result.registered
-          ? 'Não foi possível abrir o WhatsApp. A solicitação foi registrada e sua lista continua salva.'
-          : 'Não foi possível abrir o WhatsApp nem registrar a solicitação. Sua lista continua salva neste navegador.');
-      }
-    } finally {
-      setBusy(false);
+    if (!openWhatsAppQuote(prepared.url)) {
+      setError('Não foi possível abrir o WhatsApp. Tente novamente ou copie os dados da sua lista antes de sair.');
+      return;
     }
+    setStatus('O WhatsApp foi aberto com a mensagem preparada. Revise e envie por lá; sua lista continua salva neste navegador.');
   }
 
   return (
@@ -162,25 +110,29 @@ function Quote() {
           <h2 className="font-bold">Seus dados</h2>
           <div className="mt-4 space-y-3 text-foreground">
             <label className="block text-sm">Nome *
-              <input aria-label="Nome" autoComplete="name" value={contact.nome} maxLength={100} onChange={event => setContact({ ...contact, nome: event.target.value })} placeholder="Seu nome" className={`${field} mt-1`} />
+              <input aria-label="Nome" autoComplete="off" value={contact.nome} maxLength={100} onChange={event => setContact({ ...contact, nome: event.target.value })} placeholder="Seu nome" className={`${field} mt-1`} />
             </label>
             <label className="block text-sm">Empresa (opcional)
-              <input aria-label="Empresa" autoComplete="organization" value={contact.empresa} maxLength={100} onChange={event => setContact({ ...contact, empresa: event.target.value })} placeholder="Empresa" className={`${field} mt-1`} />
+              <input aria-label="Empresa" autoComplete="off" value={contact.empresa} maxLength={100} onChange={event => setContact({ ...contact, empresa: event.target.value })} placeholder="Empresa" className={`${field} mt-1`} />
             </label>
             <label className="block text-sm">Cidade *
-              <input aria-label="Cidade" autoComplete="address-level2" value={contact.cidade} maxLength={100} onChange={event => setContact({ ...contact, cidade: event.target.value })} placeholder="Cidade" className={`${field} mt-1`} />
+              <input aria-label="Cidade" autoComplete="off" value={contact.cidade} maxLength={100} onChange={event => setContact({ ...contact, cidade: event.target.value })} placeholder="Cidade" className={`${field} mt-1`} />
             </label>
             <label className="block text-sm">WhatsApp para contato *
-              <input aria-label="WhatsApp para contato" autoComplete="tel" type="tel" value={contact.whatsapp} maxLength={30} onChange={event => setContact({ ...contact, whatsapp: event.target.value })} placeholder="(19) 99999-9999" className={`${field} mt-1`} />
+              <input aria-label="WhatsApp para contato" autoComplete="off" type="tel" value={contact.whatsapp} maxLength={30} onChange={event => setContact({ ...contact, whatsapp: event.target.value })} placeholder="(19) 99999-9999" className={`${field} mt-1`} />
+            </label>
+            <label className="block text-sm">E-mail (opcional)
+              <input aria-label="E-mail" autoComplete="off" type="email" value={contact.email} maxLength={254} onChange={event => setContact({ ...contact, email: event.target.value })} placeholder="voce@exemplo.com" className={`${field} mt-1`} />
             </label>
             <label className="block text-sm">Observações (opcional)
-              <textarea aria-label="Observações" value={contact.observations} maxLength={1000} onChange={event => setContact({ ...contact, observations: event.target.value })} placeholder="Informações adicionais sobre sua solicitação" className="mt-1 min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 outline-none focus:ring-2 focus:ring-ring" />
+              <textarea aria-label="Observações" autoComplete="off" value={contact.observations} maxLength={1000} onChange={event => setContact({ ...contact, observations: event.target.value })} placeholder="Informações adicionais sobre sua solicitação" className="mt-1 min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 outline-none focus:ring-2 focus:ring-ring" />
             </label>
           </div>
-          <Button variant="gold" disabled={!!validationError || busy} onClick={send} className="mt-5 h-12 w-full">{busy ? 'Preparando solicitação…' : 'Continuar pelo WhatsApp'}</Button>
+          {validationError && <p role="alert" className="mt-4 text-sm">{validationError}</p>}
+          <Button variant="gold" disabled={!!validationError} onClick={send} className="mt-5 h-12 w-full">Continuar pelo WhatsApp</Button>
           {error && <p role="alert" className="mt-3 text-sm">{error}</p>}
           {status && <p role="status" className="mt-3 text-sm">{status}</p>}
-          <p className="mt-3 text-xs text-primary-foreground/60">Nenhum pagamento é feito pelo site. Seus dados serão usados para responder a esta solicitação, conforme a <Link to="/privacidade" className="underline">política de privacidade</Link>.</p>
+          <p className="mt-3 text-xs text-primary-foreground/60">A mensagem só será enviada quando você confirmar no WhatsApp. Consulte a <Link to="/privacidade" className="underline">política de privacidade</Link>.</p>
         </div>
       </section>
     </>

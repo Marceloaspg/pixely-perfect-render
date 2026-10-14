@@ -13,17 +13,17 @@ const featuredMocks = vi.hoisted(() => ({
 
 const carouselHarness = vi.hoisted(() => {
   const listeners = new Map<string, Set<() => void>>();
-  const state = { snapCount: 1, selected: 0 };
+  const state = { snapCount: 1, selected: 0, options: null as null | { loop: boolean } };
   const emit = (event: string) => listeners.get(event)?.forEach((listener) => listener());
   const api = {
-    canScrollNext: vi.fn(() => state.selected < state.snapCount - 1),
-    canScrollPrev: vi.fn(() => state.selected > 0),
+    canScrollNext: vi.fn(() => state.snapCount > 1),
+    canScrollPrev: vi.fn(() => state.snapCount > 1),
     scrollNext: vi.fn(() => {
-      state.selected = Math.min(state.selected + 1, state.snapCount - 1);
+      state.selected = (state.selected + 1) % state.snapCount;
       emit("select");
     }),
     scrollPrev: vi.fn(() => {
-      state.selected = Math.max(state.selected - 1, 0);
+      state.selected = (state.selected - 1 + state.snapCount) % state.snapCount;
       emit("select");
     }),
     scrollTo: vi.fn((snap: number) => {
@@ -47,6 +47,7 @@ const carouselHarness = vi.hoisted(() => {
     reset() {
       state.snapCount = 1;
       state.selected = 0;
+      state.options = null;
       listeners.clear();
       Object.values(api).forEach((method) => {
         if (typeof method === "function" && "mockClear" in method) method.mockClear();
@@ -65,7 +66,10 @@ vi.mock("@/lib/catalog-context", () => ({
 }));
 
 vi.mock("embla-carousel-react", () => ({
-  default: () => [vi.fn(), carouselHarness.api],
+  default: (options: { loop: boolean }) => {
+    carouselHarness.state.options = options;
+    return [vi.fn(), carouselHarness.api];
+  },
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -103,7 +107,11 @@ function createProduct(slug: string) {
   };
 }
 
-function renderFeatured(products: ReturnType<typeof createProduct>[], eligibleSlugs: string[]) {
+function renderFeatured(
+  products: ReturnType<typeof createProduct>[],
+  eligibleSlugs: string[],
+  categoryActive = true,
+) {
   const visibleCount = window.innerWidth >= 1024 ? 3 : window.innerWidth >= 640 ? 2 : 1;
   carouselHarness.state.snapCount = Math.max(1, products.length - visibleCount + 1);
   carouselHarness.state.selected = 0;
@@ -113,7 +121,7 @@ function renderFeatured(products: ReturnType<typeof createProduct>[], eligibleSl
       {
         ...categoryDataSchema.parse({ name: "Embalagens" }),
         slug: "embalagens",
-        active: true,
+        active: categoryActive,
         image: "",
       },
     ],
@@ -176,6 +184,39 @@ describe("FeaturedProductsCarousel", () => {
 
     expect(screen.getAllByRole("link", { name: /Veja mais sobre Produto/ })).toHaveLength(1);
     expect(screen.getByRole("heading", { name: "Produto eligible" })).toBeInTheDocument();
+  });
+
+  it("excludes products belonging to an inactive category even when server slugs are stale", () => {
+    renderFeatured([createProduct("inactive-category")], ["inactive-category"], false);
+    expect(screen.queryByRole("heading", { name: "Produtos em Destaque" })).not.toBeInTheDocument();
+  });
+
+  it("uses Embla looping and wraps manual navigation from both ends without duplicating product cards", () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    renderFeatured(
+      [createProduct("one"), createProduct("two"), createProduct("three")],
+      ["one", "two", "three"],
+    );
+    expect(carouselHarness.state.options).toEqual({ align: "start", containScroll: "trimSnaps", slidesToScroll: 1, loop: true });
+    expect(screen.getAllByRole("group", { name: /Produto/ })).toHaveLength(3);
+
+    fireEvent.click(screen.getByRole("button", { name: "Produtos anteriores" }));
+    expect(carouselHarness.state.selected).toBe(2);
+    fireEvent.click(screen.getByRole("button", { name: "Próximos produtos" }));
+    expect(carouselHarness.state.selected).toBe(0);
+    expect(screen.getAllByRole("group", { name: /Produto/ })).toHaveLength(3);
+  });
+
+  it("hides the featured-products section and controls for zero or one product", () => {
+    const empty = renderFeatured([], []);
+    expect(empty.container).toBeEmptyDOMElement();
+    empty.unmount();
+    cleanup();
+
+    renderFeatured([createProduct("only")], ["only"]);
+    expect(screen.getByRole("heading", { name: "Produtos em Destaque" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Produtos anteriores" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Próximos produtos" })).not.toBeInTheDocument();
   });
 
   it("omits products already represented by a managed product banner", () => {
@@ -305,7 +346,8 @@ describe("FeaturedProductsCarousel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
-    expect(carouselHarness.api.scrollTo).toHaveBeenLastCalledWith(0);
+    expect(carouselHarness.api.scrollNext).toHaveBeenCalledTimes(3);
+    expect(carouselHarness.state.selected).toBe(0);
   });
 
   it("pauses on hover and resumes after the pointer leaves", async () => {

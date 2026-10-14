@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import type { Product } from '@/data/catalog';
+import { whatsappLink } from './config';
+
+export const MAX_QUOTE_ITEMS = 50;
+export const MAX_WHATSAPP_MESSAGE_LENGTH = 8_000;
 
 export type QuoteItem = {
   id?: string;
@@ -11,6 +15,7 @@ export type QuoteItem = {
   sku?: string;
   material?: string;
   dimensions?: string;
+  specs?: string[];
   packageQuantity?: number | null;
   packageType?: string;
   packUnit?: string;
@@ -21,22 +26,24 @@ export type QuoteContact = {
   empresa?: string;
   cidade: string;
   whatsapp?: string;
+  email?: string;
   observations?: string;
 };
 
 const quoteItemSchema = z.object({
-  id: z.string().optional(),
-  slug: z.string().min(1),
-  name: z.string().min(1),
-  quantity: z.string().default(''),
-  variationId: z.string().optional(),
-  variation: z.string().optional(),
-  sku: z.string().optional(),
-  material: z.string().optional(),
-  dimensions: z.string().optional(),
+  id: z.string().max(120).optional(),
+  slug: z.string().trim().min(1).max(120),
+  name: z.string().trim().min(1).max(120),
+  quantity: z.string().max(30).default(''),
+  variationId: z.string().max(300).optional(),
+  variation: z.string().trim().max(120).optional(),
+  sku: z.string().max(60).optional(),
+  material: z.string().max(120).optional(),
+  dimensions: z.string().max(100).optional(),
+  specs: z.array(z.string().max(200)).max(30).optional(),
   packageQuantity: z.number().int().positive().nullable().optional(),
-  packageType: z.string().optional(),
-  packUnit: z.string().optional(),
+  packageType: z.string().max(20).optional(),
+  packUnit: z.string().max(120).optional(),
 });
 
 export const quoteContactSchema = z.object({
@@ -45,6 +52,9 @@ export const quoteContactSchema = z.object({
   cidade: z.string().trim().min(1, 'Informe sua cidade.').max(100),
   whatsapp: z.string().trim().min(1, 'Informe um WhatsApp para contato.').max(30)
     .refine(value => value.replace(/\D/g, '').length >= 10 && value.replace(/\D/g, '').length <= 15, 'Informe um WhatsApp válido com DDD.'),
+  email: z.string().trim().max(254)
+    .refine(value => value === '' || z.string().email().safeParse(value).success, 'Informe um e-mail válido.')
+    .optional().default(''),
   observations: z.string().trim().max(1000).optional().default(''),
 });
 
@@ -64,6 +74,7 @@ export function migrateQuoteItems(value: unknown): QuoteItem[] {
       ...(item.sku !== undefined ? { sku: item.sku } : {}),
       ...(item.material !== undefined ? { material: item.material } : {}),
       ...(item.dimensions !== undefined ? { dimensions: item.dimensions } : {}),
+      ...(item.specs !== undefined ? { specs: item.specs } : {}),
       ...(item.packageQuantity !== undefined ? { packageQuantity: item.packageQuantity } : {}),
       ...(item.packageType !== undefined ? { packageType: item.packageType } : {}),
       ...(item.packUnit !== undefined ? { packUnit: item.packUnit } : {}),
@@ -148,13 +159,15 @@ export function calculateTotalUnits(quantity: string, packageQuantity?: number |
 
 export function validateQuoteRequest(items: QuoteItem[], contact: QuoteContact): string | null {
   if (items.length === 0) return 'Adicione ao menos um produto à cotação.';
+  if (items.length > MAX_QUOTE_ITEMS) return `Uma solicitação pode conter no máximo ${MAX_QUOTE_ITEMS} produtos.`;
   if (items.some(item => !item.name.trim() || !item.slug.trim())) return 'Revise os produtos da cotação.';
   if (items.some(item =>
     !item.quantity.trim() ||
     item.quantity.trim().length > 30 ||
     !/^\d+(?:[.,]\d+)?$/.test(item.quantity.trim()) ||
     !Number.isFinite(Number(item.quantity.replace(',', '.'))) ||
-    Number(item.quantity.replace(',', '.')) <= 0,
+    Number(item.quantity.replace(',', '.')) <= 0 ||
+    Number(item.quantity.replace(',', '.')) > Number.MAX_SAFE_INTEGER,
   )) {
     return 'Informe uma quantidade numérica maior que zero para cada produto.';
   }
@@ -162,58 +175,219 @@ export function validateQuoteRequest(items: QuoteItem[], contact: QuoteContact):
   return parsedContact.success ? null : parsedContact.error.issues[0]?.message ?? 'Revise seus dados de contato.';
 }
 
+export function validateQuoteItemsAgainstCatalog(items: QuoteItem[], products: Product[]): string | null {
+  if (items.length > MAX_QUOTE_ITEMS) return `Uma solicitação pode conter no máximo ${MAX_QUOTE_ITEMS} produtos.`;
+  const keys = new Set<string>();
+
+  for (const item of items) {
+    const product = products.find(candidate => candidate.slug === item.slug);
+    if (!product || !product.active || product.demo) {
+      return `O produto "${item.name}" não está mais disponível no catálogo. Revise a lista antes de continuar.`;
+    }
+    const options = [...new Set(product.variations.map(value => value.trim()).filter(Boolean))];
+    const variation = item.variation?.trim();
+    if (
+      (options.length > 1 && (!variation || !options.includes(variation))) ||
+      (!!variation && !options.includes(variation)) ||
+      (item.variationId !== undefined && item.variationId !== variationIdForValue(variation ?? ''))
+    ) {
+      return `Revise a variação selecionada para "${product.name}".`;
+    }
+    const key = `${product.slug}::${variation ? variationIdForValue(variation) : 'default'}`;
+    if (keys.has(key)) return `Remova itens duplicados de "${product.name}" da lista.`;
+    keys.add(key);
+  }
+  return null;
+}
+
+export type PreparedQuoteWhatsApp =
+  | { ok: true; url: string; message: string }
+  | { ok: false; error: string };
+
+export function prepareQuoteForWhatsApp(
+  items: QuoteItem[],
+  contact: QuoteContact,
+  products: Product[],
+  commercialNumber: string,
+): PreparedQuoteWhatsApp {
+  const validation = validateQuoteRequest(items, contact);
+  if (validation) return { ok: false, error: validation };
+  const catalogValidation = validateQuoteItemsAgainstCatalog(items, products);
+  if (catalogValidation) return { ok: false, error: catalogValidation };
+
+  const parsedContact = quoteContactSchema.safeParse(contact);
+  if (!parsedContact.success) return { ok: false, error: 'Revise seus dados de contato.' };
+  const messageItems = items.map(item => {
+    const product = products.find(candidate => candidate.slug === item.slug)!;
+    return {
+      ...(item.id ? { id: item.id } : {}),
+      slug: item.slug,
+      name: product.name,
+      quantity: item.quantity,
+      ...(item.variation ? { variation: item.variation } : {}),
+      ...(product.sku ? { sku: product.sku } : {}),
+      ...(product.material ? { material: product.material } : {}),
+      dimensions: formatProductDimensions(product),
+      specs: product.specs,
+      packageQuantity: product.packageQuantity,
+      ...(product.packageType ? { packageType: product.packageType } : {}),
+      ...(product.packUnit ? { packUnit: product.packUnit } : {}),
+    };
+  });
+  const dynamicText = messageItems.flatMap(item => [
+    item.name,
+    item.sku ?? '',
+    item.variation ?? '',
+    item.material ?? '',
+    item.dimensions ?? '',
+    ...(item.specs ?? []),
+    item.packageType ?? '',
+    item.packUnit ?? '',
+  ]);
+  dynamicText.push(parsedContact.data.observations ?? '');
+  if (dynamicText.some(value => value.includes('\uFFFD'))) {
+    return { ok: false, error: 'A mensagem contém caracteres inválidos. Revise os dados dos produtos e tente novamente.' };
+  }
+  const message = buildQuoteMessage(messageItems, parsedContact.data);
+  if (message.length > MAX_WHATSAPP_MESSAGE_LENGTH) {
+    return {
+      ok: false,
+      error: 'A mensagem ficou muito extensa. Reduza a quantidade de itens ou o texto das observações e tente novamente.',
+    };
+  }
+  const url = whatsappLink(message, commercialNumber);
+  if (!url) return { ok: false, error: 'O número comercial do WhatsApp não está configurado corretamente.' };
+  return { ok: true, url, message };
+}
+
+function formatQuantity(value: string): string {
+  const normalized = value.trim().replace(',', '.');
+  const [integer = '0', fraction = ''] = normalized.split('.');
+  const groupedInteger = integer.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const trimmedFraction = fraction.replace(/0+$/, '');
+  return trimmedFraction ? `${groupedInteger},${trimmedFraction}` : groupedInteger;
+}
+
+function sumQuantities(values: string[]): string {
+  const fractions = values.map(value => value.trim().replace(',', '.').split('.')[1] ?? '');
+  const scale = Math.max(0, ...fractions.map(fraction => fraction.length));
+  const factor = 10n ** BigInt(scale);
+  const total = values.reduce((sum, value) => {
+    const [integer = '0', fraction = ''] = value.trim().replace(',', '.').split('.');
+    const scaled = BigInt(integer) * factor + BigInt((fraction + '0'.repeat(scale)).slice(0, scale) || '0');
+    return sum + scaled;
+  }, 0n);
+  const integer = (total / factor).toString();
+  const fraction = scale ? (total % factor).toString().padStart(scale, '0').replace(/0+$/, '') : '';
+  return formatQuantity(fraction ? `${integer}.${fraction}` : integer);
+}
+
+function pluralizeCommercialUnit(unit: string): string {
+  const normalized = unit.trim().toLocaleLowerCase('pt-BR');
+  if (normalized === 'unidade') return 'unidades';
+  if (normalized === 'caixa') return 'caixas';
+  if (normalized === 'pacote') return 'pacotes';
+  if (normalized === 'fardo') return 'fardos';
+  return `${unit.trim()}s`;
+}
+
+function commercialQuantityUnit(item: QuoteItem): string {
+  const packageType = cleanWhatsAppText(item.packageType ?? '');
+  if (packageType) return pluralizeCommercialUnit(packageType);
+
+  const packUnit = cleanWhatsAppText(item.packUnit ?? '');
+  if (packUnit) {
+    if (/^(unidade|caixa|pacote|fardo)$/i.test(packUnit)) return pluralizeCommercialUnit(packUnit);
+    return `× ${packUnit}`;
+  }
+  return 'embalagens';
+}
+
+function cleanWhatsAppText(value: string): string {
+  return value
+    .replace(/\uFFFD/gu, '')
+    .replace(/(?:[#*0-9]\uFE0F?\u20E3)|[\p{Extended_Pictographic}\p{Emoji_Presentation}\p{Regional_Indicator}\uFE0F\u20E3\u200D\u{1F3FB}-\u{1F3FF}]/gu, '')
+    .replace(/[ \t]{2,}/gu, ' ')
+    .trim();
+}
+
 function addIfPresent(lines: string[], label: string, value: string | number | null | undefined): void {
-  if (value !== undefined && value !== null && String(value).trim()) lines.push(`${label}: ${value}`);
+  if (value === undefined || value === null) return;
+  const cleaned = cleanWhatsAppText(String(value));
+  if (cleaned) lines.push(`${label}: ${cleaned}`);
 }
 
 export function buildQuoteMessage(items: QuoteItem[], contact: QuoteContact): string {
   const lines = [
-    'MAJESTA EMBALAGENS — SOLICITAÇÃO DE ORÇAMENTO',
+    '*MAJESTA EMBALAGENS*',
+    '*SOLICITAÇÃO DE ORÇAMENTO*',
     '',
-    `Olá, ${contact.nome.trim()}!`,
+    'Olá!',
+    '',
+    'Gostaria de solicitar uma cotação dos seguintes produtos:',
+    '',
+    '---',
   ];
-  addIfPresent(lines, 'Empresa', contact.empresa);
-  addIfPresent(lines, 'Cidade', contact.cidade);
-  addIfPresent(lines, 'WhatsApp para contato', contact.whatsapp);
-  lines.push('', 'Produtos solicitados:');
 
   items.forEach((item, index) => {
-    lines.push('', `${index + 1}. ${item.name}`);
-    addIfPresent(lines, 'SKU', item.sku);
-    addIfPresent(lines, 'Tamanho/modelo', item.variation);
+    if (index > 0) lines.push('', '---');
+    lines.push('', `*${String(index + 1).padStart(2, '0')}. ${cleanWhatsAppText(item.name)}*`);
+    addIfPresent(lines, 'Código', item.sku);
+    addIfPresent(lines, 'Modelo', item.variation || item.dimensions);
     addIfPresent(lines, 'Material', item.material);
-    addIfPresent(lines, 'Dimensões', item.dimensions);
-    const commercialPackage = item.packageType ? item.packageType : 'embalagem';
-    if (item.packageQuantity) {
-      addIfPresent(lines, 'Conteúdo por embalagem', `${item.packageQuantity} unidades${item.packageType ? ` (${item.packageType})` : ''}`);
-    } else {
-      addIfPresent(lines, 'Unidade comercial', item.packUnit || commercialPackage);
-    }
-    addIfPresent(lines, 'Embalagens solicitadas', item.quantity);
-    const totalUnits = calculateTotalUnits(item.quantity, item.packageQuantity);
-    if (totalUnits !== null) addIfPresent(lines, 'Total de unidades estimado', totalUnits);
+    if (item.specs?.length) addIfPresent(lines, 'Especificações', item.specs.map(value => value.trim()).filter(Boolean).join(', '));
+    lines.push(`Quantidade: *${formatQuantity(item.quantity)} ${commercialQuantityUnit(item)}*`);
   });
 
+  const quantitiesByUnit = new Map<string, string[]>();
+  for (const item of items) {
+    const unit = commercialQuantityUnit(item);
+    quantitiesByUnit.set(unit, [...(quantitiesByUnit.get(unit) ?? []), item.quantity]);
+  }
+  const distinctProducts = new Set(items.map(item => item.slug)).size;
+  lines.push(
+    '',
+    '---',
+    '',
+    '*RESUMO DA SOLICITAÇÃO*',
+    '',
+    `Produtos diferentes: *${distinctProducts}*`,
+  );
+  if (quantitiesByUnit.size === 1) {
+    const [unit, quantities] = [...quantitiesByUnit.entries()][0]!;
+    lines.push(`Quantidade total: *${sumQuantities(quantities)} ${unit}*`);
+  } else {
+    lines.push('Quantidade total por unidade comercial:');
+    for (const [unit, quantities] of quantitiesByUnit) {
+      lines.push(`- *${sumQuantities(quantities)} ${unit}*`);
+    }
+  }
+  lines.push(
+    '',
+    '*INFORMAÇÕES DESEJADAS*',
+    '',
+    '- Valores dos produtos',
+    '- Disponibilidade em estoque',
+    '- Prazo e condições de entrega',
+    '- Formas de pagamento',
+    '- Quantidade mínima para pedido',
+  );
   addIfPresent(lines, 'Observações', contact.observations);
-  lines.push('', 'Por favor, informem preços, disponibilidade e condições de atendimento para os itens acima.', 'Aguardo retorno. Obrigado!');
+  lines.push(
+    '',
+    'Agradeço pela atenção e aguardo o retorno com a proposta comercial!',
+  );
   return lines.join('\n');
 }
 
-export async function registerQuoteAndOpenWhatsApp(
-  register: () => Promise<unknown>,
-  openWhatsApp: () => void,
-): Promise<{ registered: boolean; opened: boolean }> {
-  let registered = false;
+export function openWhatsAppQuote(
+  url: string,
+  navigate: (target: string) => void = target => window.location.assign(target),
+): boolean {
   try {
-    const result = await register();
-    registered = result !== false && !(typeof result === 'object' && result !== null && 'saved' in result && result.saved === false);
+    navigate(url);
+    return true;
   } catch {
-    registered = false;
-  }
-  try {
-    openWhatsApp();
-    return { registered, opened: true };
-  } catch {
-    return { registered, opened: false };
+    return false;
   }
 }

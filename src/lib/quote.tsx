@@ -15,7 +15,9 @@ export {
   calculateTotalUnits,
   quoteContactSchema,
   quoteItemKey,
-  registerQuoteAndOpenWhatsApp,
+  openWhatsAppQuote,
+  prepareQuoteForWhatsApp,
+  validateQuoteItemsAgainstCatalog,
   validateQuoteRequest,
 } from './quote-model';
 export type { QuoteContact, QuoteItem } from './quote-model';
@@ -55,12 +57,16 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      setItems(enrichQuoteItems(migrateQuoteItems(JSON.parse(localStorage.getItem(KEY) || '[]')), products));
+      const savedItems = migrateQuoteItems(JSON.parse(localStorage.getItem(KEY) || '[]'));
+      setItems(enrichQuoteItems(
+        savedItems.filter(item => products.some(product => product.slug === item.slug && product.active)),
+        products,
+      ));
     } catch {
       setItems([]);
     }
     setReady(true);
-  }, []);
+  }, [products]);
 
   useEffect(() => {
     if (ready) localStorage.setItem(KEY, JSON.stringify(items));

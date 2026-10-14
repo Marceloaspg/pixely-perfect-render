@@ -184,7 +184,7 @@ export function buildHomepageSlides(
   );
   const publicProducts = new Map(
     products
-      .filter((product) => product.active && activeCategorySlugs.has(product.category))
+      .filter((product) => product.active && !product.demo && activeCategorySlugs.has(product.category))
       .map((product) => [product.slug, product]),
   );
   const eligibleBanners = banners

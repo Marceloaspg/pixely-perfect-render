@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, ArrowRight as ArrowRightLink } from "lucide-reac
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import useEmblaCarousel from "embla-carousel-react";
 import { useCatalog } from "@/lib/catalog-context";
+import { filterPublicCatalog } from "@/data/catalog";
 import { getHomepageBanners, getHomepageFeaturedProductSlugs } from "@/lib/catalog.functions";
 import { Button } from "@/components/ui/button";
 
@@ -25,11 +26,15 @@ export function FeaturedProductsCarousel() {
   const { data: eligibleSlugs = [] } = useQuery(featuredProductsQuery);
   const { data: homepageBanners = [] } = useQuery(homepageBannersQuery);
   const { products, categories } = useCatalog();
+  const publicCatalog = useMemo(
+    () => filterPublicCatalog(categories, products),
+    [categories, products],
+  );
   const [viewportRef, emblaApi] = useEmblaCarousel({
     align: "start",
     containScroll: "trimSnaps",
     slidesToScroll: 1,
-    loop: false,
+    loop: true,
   });
   const interactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeSnap, setActiveSnap] = useState(0);
@@ -40,11 +45,6 @@ export function FeaturedProductsCarousel() {
   const [focusWithin, setFocusWithin] = useState(false);
   const [touching, setTouching] = useState(false);
 
-  const activeCategories = useMemo(
-    () =>
-      new Set(categories.filter((category) => category.active).map((category) => category.slug)),
-    [categories],
-  );
   const eligibleSet = useMemo(() => new Set(eligibleSlugs), [eligibleSlugs]);
   const bannerLinkedProducts = useMemo(
     () =>
@@ -57,20 +57,17 @@ export function FeaturedProductsCarousel() {
   );
   const featuredProducts = useMemo(
     () =>
-      products
+      publicCatalog.products
         .filter(
           (product) =>
             eligibleSet.has(product.slug) &&
             !bannerLinkedProducts.has(product.slug) &&
-            product.active &&
-            activeCategories.has(product.category) &&
             product.featured &&
-            !product.demo &&
             Boolean(product.imagePath && product.image) &&
             product.imageAvailable !== false,
         )
         .sort((left, right) => left.order - right.order || left.name.localeCompare(right.name)),
-    [activeCategories, bannerLinkedProducts, eligibleSet, products],
+    [bannerLinkedProducts, eligibleSet, publicCatalog.products],
   );
 
   useEffect(() => {
@@ -128,14 +125,23 @@ export function FeaturedProductsCarousel() {
     emblaApi?.scrollTo(snap, !reducedMotion);
   }
 
+  function goNext() {
+    if (!emblaApi) return;
+    if (emblaApi.canScrollNext()) emblaApi.scrollNext(!reducedMotion);
+    else goToSnap(0);
+  }
+
+  function goPrevious() {
+    if (!emblaApi) return;
+    if (emblaApi.canScrollPrev()) emblaApi.scrollPrev(!reducedMotion);
+    else goToSnap(snapCount - 1);
+  }
+
   useEffect(() => {
     if (!emblaApi || !hasMultipleSnaps || reducedMotion || interactionActive) return;
     const timer = setTimeout(() => {
-      if (emblaApi.canScrollNext()) {
-        emblaApi.scrollNext();
-      } else {
-        emblaApi.scrollTo(0);
-      }
+      if (emblaApi.canScrollNext()) emblaApi.scrollNext();
+      else emblaApi.scrollTo(0);
     }, 2000);
     return () => clearTimeout(timer);
   }, [activeSnap, emblaApi, hasMultipleSnaps, interactionActive, reducedMotion]);
@@ -143,10 +149,10 @@ export function FeaturedProductsCarousel() {
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key === "ArrowLeft") {
       event.preventDefault();
-      if (emblaApi?.canScrollPrev()) emblaApi.scrollPrev(!reducedMotion);
+      if (hasMultipleSnaps) goPrevious();
     } else if (event.key === "ArrowRight") {
       event.preventDefault();
-      if (emblaApi?.canScrollNext()) emblaApi.scrollNext(!reducedMotion);
+      if (hasMultipleSnaps) goNext();
     } else if (event.key === "Home") {
       event.preventDefault();
       goToSnap(0);
@@ -201,7 +207,7 @@ export function FeaturedProductsCarousel() {
               variant="outline"
               size="icon"
               aria-label="Produtos anteriores"
-              onClick={() => emblaApi?.scrollPrev(!reducedMotion)}
+              onClick={goPrevious}
               className="shrink-0 rounded-full border-navy/15 text-navy"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -271,7 +277,7 @@ export function FeaturedProductsCarousel() {
               variant="outline"
               size="icon"
               aria-label="Próximos produtos"
-              onClick={() => emblaApi?.scrollNext(!reducedMotion)}
+              onClick={goNext}
               className="shrink-0 rounded-full border-navy/15 text-navy"
             >
               <ArrowRight className="h-4 w-4" />
