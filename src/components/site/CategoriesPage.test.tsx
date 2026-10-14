@@ -38,11 +38,12 @@ vi.mock("@/components/site/Layout", () => ({
   ),
 }));
 
-function category(slug: string, name: string, order: number, options: { active?: boolean; imagePath?: string; imageKey?: string } = {}) {
+function category(slug: string, name: string, order: number, options: { active?: boolean; imagePath?: string; imageKey?: string; description?: string } = {}) {
   return {
     ...categoryDataSchema.parse({
       name,
       order,
+      description: options.description ?? "",
       imagePath: options.imagePath ?? "",
       imageKey: options.imageKey ?? "burger",
     }),
@@ -67,7 +68,7 @@ describe("categories page", () => {
     setCatalog([
       category("primeira", "Primeira categoria", 0, { imagePath: "categories/primeira.webp" }),
       category("inativa", "Categoria inativa", 1, { active: false }),
-      category("segunda", "Segunda categoria", 2),
+      category("segunda", "Segunda categoria", 2, { description: "Descrição da segunda categoria." }),
     ]);
     render(<CategoriesPage />);
 
@@ -75,9 +76,16 @@ describe("categories page", () => {
     expect(screen.getByText("Encontre a embalagem ideal para o seu negócio.")).toBeInTheDocument();
     const list = screen.getByRole("region", { name: "Categorias de embalagens" });
     const cards = within(list).getAllByRole("link");
-    expect(cards.map(card => card.textContent?.trim())).toEqual(["Primeira categoria", "Segunda categoria"]);
+    expect(cards.map(card => card.getAttribute("aria-label"))).toEqual(["Ver categoria Primeira categoria", "Ver categoria Segunda categoria"]);
     expect(cards[0]).toHaveAttribute("href", "/categorias/primeira");
     expect(cards[1]).toHaveAttribute("href", "/categorias/segunda");
+    expect(within(cards[0]!).getByText("Ver produtos")).toBeInTheDocument();
+    expect(within(cards[1]!).getByText("Ver produtos")).toBeInTheDocument();
+    expect(within(cards[1]!).getByText("Descrição da segunda categoria.")).toBeInTheDocument();
+    expect(cards[0]).toHaveClass("flex", "h-full", "flex-col");
+    expect(cards[1]).toHaveClass("flex", "h-full", "flex-col");
+    expect(within(cards[0]!).getByText("Ver produtos")).toHaveClass("mt-auto");
+    expect(within(cards[1]!).getByText("Ver produtos")).toHaveClass("mt-auto");
     expect(within(list).queryByText("Categoria inativa")).not.toBeInTheDocument();
     expect(cards[0]!.querySelector("img")).toHaveAttribute("src", "/signed/primeira.webp");
     expect(cards[1]!.querySelector("img")).toBeNull();
@@ -90,6 +98,14 @@ describe("categories page", () => {
     const card = screen.getByRole("link", { name: "Ver categoria Caixas" });
     expect(card.querySelector("img")).toBeNull();
     expect(card.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("keeps the responsive grid and links product actions to each category route", () => {
+    setCatalog([category("caixas", "Caixas", 0, { description: "Embalagens para seus produtos." })]);
+    render(<CategoriesPage />);
+    const list = screen.getByRole("region", { name: "Categorias de embalagens" }).querySelector("ul");
+    expect(list).toHaveClass("grid-cols-1", "sm:grid-cols-2", "lg:grid-cols-3");
+    expect(screen.getByRole("link", { name: "Ver categoria Caixas" })).toHaveAttribute("href", "/categorias/caixas");
   });
 
   it("shows a friendly empty state when no categories are active", () => {

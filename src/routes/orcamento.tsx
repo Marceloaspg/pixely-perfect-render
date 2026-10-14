@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { ArrowLeft, Trash2 } from 'lucide-react';
 import { useCatalog } from '@/lib/catalog-context';
 import { Button } from '@/components/ui/button';
 import { PageHero } from '@/components/site/Layout';
@@ -16,12 +16,12 @@ export const Route = createFileRoute('/orcamento')({
       { property: 'og:description', content: 'Selecione produtos, informe quantidades e envie pelo WhatsApp.' },
     ],
   }),
-  component: Quote,
+  component: QuotePage,
 });
 
 const field = 'h-11 w-full rounded-xl border border-input bg-background px-3 outline-none focus:ring-2 focus:ring-ring';
 
-function Quote() {
+export function QuotePage() {
   const { items, remove, setQty, setVariation } = useQuote();
   const { config, products } = useCatalog();
   const [error, setError] = useState('');
@@ -42,7 +42,7 @@ function Quote() {
       setError('Não foi possível abrir o WhatsApp. Tente novamente ou copie os dados da sua lista antes de sair.');
       return;
     }
-    setStatus('O WhatsApp foi aberto com a mensagem preparada. Revise e envie por lá; sua lista continua salva neste navegador.');
+    setStatus('O link do WhatsApp foi aberto em uma nova aba, se permitido pelo navegador. Revise a mensagem e confirme o envio por lá; sua lista continua salva neste navegador.');
   }
 
   return (
@@ -129,10 +129,15 @@ function Quote() {
             </label>
           </div>
           {validationError && <p role="alert" className="mt-4 text-sm">{validationError}</p>}
-          <Button variant="gold" disabled={!!validationError} onClick={send} className="mt-5 h-12 w-full">Continuar pelo WhatsApp</Button>
+          <div className="mt-5 flex flex-col items-center gap-3 sm:flex-row sm:items-stretch">
+            <Button asChild variant="outline" className="h-12 w-full max-w-sm rounded-full border-primary-foreground/35 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground sm:flex-1">
+              <Link to="/produtos"><ArrowLeft aria-hidden="true" />Continuar comprando</Link>
+            </Button>
+            <Button variant="gold" disabled={!!validationError} onClick={send} className="h-12 w-full max-w-sm rounded-full font-semibold sm:flex-[1.35]">Continuar pelo WhatsApp</Button>
+          </div>
           {error && <p role="alert" className="mt-3 text-sm">{error}</p>}
           {status && <p role="status" className="mt-3 text-sm">{status}</p>}
-          <p className="mt-3 text-xs text-primary-foreground/60">A mensagem só será enviada quando você confirmar no WhatsApp. Consulte a <Link to="/privacidade" className="underline">política de privacidade</Link>.</p>
+          <p className="mt-3 text-xs text-primary-foreground/60">O WhatsApp abre em uma nova aba quando permitido pelo navegador. Revise e confirme o envio por lá; sua lista continua salva neste navegador. Consulte a <Link to="/privacidade" className="underline">política de privacidade</Link>.</p>
         </div>
       </section>
     </>

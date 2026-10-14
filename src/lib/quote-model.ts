@@ -382,10 +382,11 @@ export function buildQuoteMessage(items: QuoteItem[], contact: QuoteContact): st
 
 export function openWhatsAppQuote(
   url: string,
-  navigate: (target: string) => void = target => window.location.assign(target),
+  open: (target: string, targetName: string, features: string) => Window | null =
+    (target, targetName, features) => window.open(target, targetName, features),
 ): boolean {
   try {
-    navigate(url);
+    open(url, '_blank', 'noopener,noreferrer');
     return true;
   } catch {
     return false;

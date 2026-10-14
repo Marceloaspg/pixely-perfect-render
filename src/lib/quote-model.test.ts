@@ -415,10 +415,10 @@ it('URL-encodes the complete message and uses the configured commercial number',
   expect(whatsappLink('mensagem', 'número inválido')).toBeUndefined();
 });
 
-it('navigates to the prepared WhatsApp link synchronously and reports navigation errors', () => {
-  const navigate = vi.fn();
-  expect(openWhatsAppQuote('https://wa.me/5519996145193?text=oi', navigate)).toBe(true);
-  expect(navigate).toHaveBeenCalledWith('https://wa.me/5519996145193?text=oi');
+it('opens the prepared WhatsApp link in a secure new tab without navigating the current page', () => {
+  const open = vi.fn(() => null);
+  expect(openWhatsAppQuote('https://wa.me/5519996145193?text=oi', open)).toBe(true);
+  expect(open).toHaveBeenCalledWith('https://wa.me/5519996145193?text=oi', '_blank', 'noopener,noreferrer');
   expect(openWhatsAppQuote('https://wa.me/5519996145193', () => { throw new Error('blocked'); })).toBe(false);
 });
 
