@@ -16,11 +16,11 @@ export function CategoriesPage() {
       />
       <section aria-label="Categorias de embalagens" className="mx-auto max-w-7xl px-5 py-12">
         {visibleCategories.length > 0 ? (
-          <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {visibleCategories.map(category => {
               const hasAssignedImage = Boolean(category.imagePath || category.imageKey !== "burger");
               return (
-                <li key={category.slug}>
+                <li key={category.slug} className="h-full">
                   <Link
                     to="/categorias/$slug"
                     params={{ slug: category.slug }}
@@ -39,9 +39,15 @@ export function CategoriesPage() {
                         <Package aria-hidden="true" className="h-12 w-12 text-navy/45" strokeWidth={1.5} />
                       )}
                     </div>
-                    <div className="flex flex-1 items-center justify-between gap-4 p-5">
+                    <div className="flex flex-1 flex-col p-5">
                       <h2 className="font-bold text-navy">{category.name}</h2>
-                      <ArrowRight aria-hidden="true" className="h-5 w-5 shrink-0 text-gold transition-transform group-hover:translate-x-1" />
+                      {category.description && (
+                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{category.description}</p>
+                      )}
+                      <span className="mt-auto flex items-center gap-2 pt-5 font-semibold text-navy">
+                        Ver produtos
+                        <ArrowRight aria-hidden="true" className="h-5 w-5 shrink-0 text-gold transition-transform group-hover:translate-x-1" />
+                      </span>
                     </div>
                   </Link>
                 </li>
