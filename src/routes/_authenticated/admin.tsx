@@ -3,6 +3,9 @@ import { useRef, useState } from 'react';
 import { queryOptions, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { getAdminCatalog, getUnreferencedImageReport, removeUnreferencedCatalogImages, reorderCatalogCategories, saveCatalogItem, uploadCatalogImage } from '@/lib/catalog.functions';
+import { updateQuoteRequestStatus } from '@/lib/quote.functions';
+import { quoteRequestStatusLabels, quoteRequestStatusSchema, type QuoteRequestStatus } from '@/lib/quote-submission';
+import type { Json } from '@/integrations/supabase/types';
 import { categoryDataSchema, categorySlugSchema, imageMap, productDataSchema, contactSchema, slugify, sortCategories, type Product, type Category, type SiteConfig } from '@/data/catalog';
 import { addAdditionalImage, MAX_ADDITIONAL_IMAGES, removeImageAssociation, reorderAdditionalImages, selectMainImage } from '@/lib/product-images';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,8 +14,20 @@ import { Plus, LogOut, Pencil, Upload, Save, Search, Image as ImageIcon, Trash2,
 import { ImageCropDialog } from '@/components/admin/ImageCropDialog';
 import { getAdminRouteErrorKind, getAdminRouteErrorMessage } from '@/lib/admin-access';
 import { BannerManager } from '@/components/admin/BannerManager';
+import { z } from 'zod';
 
 const adminQuery=queryOptions({queryKey:['admin-catalog'],queryFn:()=>getAdminCatalog()});
+const quoteStatuses=quoteRequestStatusSchema.options;
+const quoteFilterSchema=z.enum(['all',...quoteStatuses]);
+
+type JsonRecord={ [key:string]:Json|undefined };
+function quoteRecord(value:Json):JsonRecord{
+ return typeof value==='object'&&value!==null&&!Array.isArray(value)?value:{};
+}
+function quoteText(record:JsonRecord,key:string):string{
+ const value=record[key];
+ return typeof value==='string'||typeof value==='number'?String(value):'';
+}
 
 export const Route=createFileRoute('/_authenticated/admin')({
   loader:({context})=>context.queryClient.ensureQueryData(adminQuery),
@@ -46,6 +61,7 @@ function Admin(){
  const qc=useQueryClient();
  const nav=useNavigate();
  const save=useServerFn(saveCatalogItem);
+ const saveQuoteStatus=useServerFn(updateQuoteRequestStatus);
  const saveOrder=useServerFn(reorderCatalogCategories);
  const uploadImage=useServerFn(uploadCatalogImage);
  const getImageReport=useServerFn(getUnreferencedImageReport);
@@ -69,6 +85,8 @@ function Admin(){
  const [searchQuery,setSearchQuery]=useState('');
  const [filterCategory,setFilterCategory]=useState('');
  const [filterStatus,setFilterStatus]=useState<'all'|'active'|'inactive'|'demo'>('all');
+ const [quoteFilter,setQuoteFilter]=useState<QuoteRequestStatus|'all'>('all');
+ const [savingQuoteId,setSavingQuoteId]=useState('');
 
  const cats=data.catalog.categories;
  const orderedCats=sortCategories(cats);
@@ -87,6 +105,21 @@ function Admin(){
      filterStatus === 'demo' ? p.demo : true;
    return matchesSearch && matchesCategory && matchesStatus;
  });
+ const filteredQuotes=data.quotes.filter(quote=>quoteFilter==='all'||quote.status===quoteFilter);
+
+ async function updateQuoteStatus(id:string,status:QuoteRequestStatus){
+   setSavingQuoteId(id);
+   setMessage('');
+   try{
+     await saveQuoteStatus({data:{id,status}});
+     await qc.invalidateQueries({queryKey:['admin-catalog']});
+     setMessage('Situação do orçamento atualizada.');
+   }catch{
+     setMessage('Não foi possível atualizar a situação. Verifique sua permissão e tente novamente.');
+   }finally{
+     setSavingQuoteId('');
+   }
+ }
 
  async function refresh(){
    await qc.invalidateQueries({queryKey:['catalog']});
@@ -990,18 +1023,82 @@ function Admin(){
 
     {/* ABA ORÇAMENTOS */}
     {tab==='Orçamentos' && (
-      <div className="divide-y divide-border rounded-2xl border border-border bg-card shadow-card">
-        {data.quotes.length===0 && (
-          <p className="p-8 text-center text-sm text-muted-foreground">Nenhum orçamento registrado no banco de dados.</p>
+      <div className="space-y-4">
+        <label className="flex max-w-sm flex-col gap-2 text-sm font-semibold text-navy">
+          Filtrar por situação
+          <select aria-label="Filtrar orçamentos por situação" value={quoteFilter} onChange={event=>{const parsed=quoteFilterSchema.safeParse(event.target.value);if(parsed.success)setQuoteFilter(parsed.data);}} className="admin-input">
+            <option value="all">Todas as situações</option>
+            {quoteStatuses.map(status=><option key={status} value={status}>{quoteRequestStatusLabels[status]}</option>)}
+          </select>
+        </label>
+        {filteredQuotes.length===0 ? (
+          <p className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+            {data.quotes.length===0?'Nenhum orçamento registrado no banco de dados.':'Nenhum orçamento corresponde ao filtro selecionado.'}
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {filteredQuotes.map(q=>{
+              const contactData=quoteRecord(q.contact);
+              const itemRows=Array.isArray(q.items)?q.items:[];
+              const customerName=quoteText(contactData,'nome')||'Cliente sem nome';
+              return (
+                <article key={q.id} className="min-w-0 rounded-2xl border border-border bg-card p-5 shadow-card sm:p-6">
+                  <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-gold">Solicitado em {new Date(q.created_at).toLocaleString('pt-BR')}</p>
+                      <h2 className="mt-1 break-all font-bold text-navy">Orçamento {q.id}</h2>
+                      <p className="mt-2 font-semibold">{customerName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {[quoteText(contactData,'empresa'),quoteText(contactData,'cidade')].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
+                    <label className="flex w-full min-w-0 flex-col gap-2 text-sm font-semibold text-navy lg:max-w-xs">
+                      Situação
+                      <select
+                        aria-label={`Situação do orçamento ${q.id}`}
+                        value={q.status}
+                        disabled={savingQuoteId===q.id}
+                        onChange={event=>{const parsed=quoteRequestStatusSchema.safeParse(event.target.value);if(parsed.success)void updateQuoteStatus(q.id,parsed.data);}}
+                        className="admin-input min-w-0 max-w-full"
+                      >
+                        {quoteStatuses.map(status=><option key={status} value={status}>{quoteRequestStatusLabels[status]}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <details className="mt-4 rounded-xl border border-border bg-secondary/30 p-4">
+                    <summary className="cursor-pointer font-semibold text-navy">Ver detalhes ({itemRows.length} {itemRows.length===1?'produto':'produtos'})</summary>
+                    <div className="mt-4 grid gap-5 lg:grid-cols-2">
+                      <section aria-label="Contato do cliente" className="space-y-2 text-sm">
+                        <h3 className="font-bold text-navy">Contato</h3>
+                        <p>Nome: {customerName}</p>
+                        {quoteText(contactData,'empresa')&&<p>Empresa: {quoteText(contactData,'empresa')}</p>}
+                        <p>Cidade: {quoteText(contactData,'cidade')||'—'}</p>
+                        <p>WhatsApp: {quoteText(contactData,'whatsapp')||'—'}</p>
+                        {quoteText(contactData,'email')&&<p>E-mail: {quoteText(contactData,'email')}</p>}
+                        {quoteText(contactData,'observations')&&<p className="whitespace-pre-wrap break-words">Observações: {quoteText(contactData,'observations')}</p>}
+                      </section>
+                      <section aria-label="Produtos solicitados" className="space-y-3">
+                        <h3 className="font-bold text-navy">Produtos solicitados</h3>
+                        {itemRows.map((raw,index)=>{
+                          const item=quoteRecord(raw);
+                          return (
+                            <div key={`${quoteText(item,'slug')}-${index}`} className="rounded-xl border border-border bg-background p-3 text-sm">
+                              <p className="font-semibold text-navy">{quoteText(item,'name')||'Produto'}</p>
+                              {quoteText(item,'sku')&&<p>SKU: {quoteText(item,'sku')}</p>}
+                              {quoteText(item,'model')&&<p>Modelo: {quoteText(item,'model')}</p>}
+                              {quoteText(item,'material')&&<p>Material: {quoteText(item,'material')}</p>}
+                              <p>Quantidade: {quoteText(item,'quantity')} {quoteText(item,'unit')}</p>
+                            </div>
+                          );
+                        })}
+                      </section>
+                    </div>
+                  </details>
+                </article>
+              );
+            })}
+          </div>
         )}
-        {data.quotes.map(q=>(
-          <article key={q.id} className="p-6">
-            <p className="text-xs font-semibold text-gold uppercase tracking-wider">{new Date(q.created_at).toLocaleString('pt-BR')}</p>
-            <pre className="mt-3 whitespace-pre-wrap font-sans text-sm rounded-xl bg-secondary/50 p-4 border border-border">
-              {JSON.stringify(q.contact,null,2)}{'\n\n'}Itens Solicitados:{'\n'}{JSON.stringify(q.items,null,2)}
-            </pre>
-          </article>
-        ))}
       </div>
     )}
   </section>

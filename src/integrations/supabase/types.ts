@@ -148,6 +148,7 @@ export type Database = {
           id: string
           items: Json
           request_key: string
+          status: "aguardando_orcamento" | "orcamento_realizado" | "compra_finalizada"
         }
         Insert: {
           contact: Json
@@ -155,6 +156,7 @@ export type Database = {
           id?: string
           items: Json
           request_key: string
+          status?: "aguardando_orcamento" | "orcamento_realizado" | "compra_finalizada"
         }
         Update: {
           contact?: Json
@@ -162,6 +164,34 @@ export type Database = {
           id?: string
           items?: Json
           request_key?: string
+          status?: "aguardando_orcamento" | "orcamento_realizado" | "compra_finalizada"
+        }
+        Relationships: []
+      }
+      quote_submission_rate_limits: {
+        Row: {
+          client_key_hash: string
+          daily_window_count: number
+          daily_window_started_at: string
+          short_window_count: number
+          short_window_started_at: string
+          updated_at: string
+        }
+        Insert: {
+          client_key_hash: string
+          daily_window_count?: number
+          daily_window_started_at: string
+          short_window_count?: number
+          short_window_started_at: string
+          updated_at?: string
+        }
+        Update: {
+          client_key_hash?: string
+          daily_window_count?: number
+          daily_window_started_at?: string
+          short_window_count?: number
+          short_window_started_at?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -196,6 +226,10 @@ export type Database = {
         Returns: boolean
       }
       reorder_homepage_banners: { Args: { _ids: string[] }; Returns: undefined }
+      consume_quote_submission_rate_limit: {
+        Args: { _client_key_hash: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin"
