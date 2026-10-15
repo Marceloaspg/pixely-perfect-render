@@ -36,13 +36,13 @@ export const Route = createFileRoute("/privacidade")({
 
         <h2 className="pt-4 text-xl font-bold text-navy">Dados coletados e finalidade</h2>
         <p>
-          Se você escolher “Registrar orçamento”, o formulário coleta nome, cidade e WhatsApp para
+          Ao solicitar o orçamento pelo formulário, nome, cidade e WhatsApp são necessários para
           contato; empresa, e-mail e observações são opcionais. O e-mail é validado quando
-          preenchido, mas não é incluído na mensagem do WhatsApp. Para acompanhar essa solicitação,
-          os dados informados e um retrato dos produtos solicitados — incluindo nomes, códigos/SKUs,
-          modelos, materiais, quantidades e unidades, quando disponíveis — são armazenados no banco
-          de dados Supabase/Lovable Cloud. O acesso aos registros é restrito a administradores
-          autorizados.
+          preenchido, mas não é incluído na mensagem do WhatsApp. Quando o registro estiver
+          disponível, os dados informados e um retrato dos produtos solicitados — incluindo nomes,
+          códigos/SKUs, modelos, materiais, quantidades e unidades, quando disponíveis — serão
+          armazenados no banco de dados Supabase/Lovable Cloud antes da abertura da conversa. O
+          acesso aos registros é restrito a administradores autorizados.
         </p>
         <p>
           Esses dados são usados para atender e acompanhar a solicitação comercial. O retrato dos
@@ -61,19 +61,20 @@ export const Route = createFileRoute("/privacidade")({
 
         <h2 className="pt-4 text-xl font-bold text-navy">Registro e uso do WhatsApp</h2>
         <p>
-          Depois de registrar o orçamento, você pode escolher abrir uma conversa no WhatsApp. Também
-          é possível usar a alternativa “Solicitar orçamento pelo WhatsApp” diretamente: nesse caso,
-          a mensagem contém os produtos, códigos/SKUs, modelos, materiais e quantidades disponíveis
-          na lista, mas não inclui os dados pessoais dos campos do formulário nem grava um novo
-          orçamento no painel administrativo. A solicitação feita por essa alternativa será tratada
-          na conversa e não ficará registrada como orçamento no painel.
+          Ao escolher a solicitação pelo formulário, o sistema valida os dados e, quando o registro
+          estiver disponível, grava o orçamento antes de abrir o WhatsApp. Se o registro estiver
+          indisponível ou não puder ser concluído, você poderá tentar novamente ou escolher o
+          atendimento direto pelo WhatsApp. Essa alternativa não exige os dados pessoais do
+          formulário, não grava um novo orçamento no painel administrativo e prepara uma mensagem
+          com os produtos, códigos/SKUs, modelos, materiais e quantidades disponíveis na lista.
         </p>
         <p>
-          Em ambos os fluxos, o site abre o WhatsApp para que você revise a mensagem. Abrir a
-          conversa não envia a mensagem automaticamente: ela só é enviada quando você confirma o
-          envio no WhatsApp. O conteúdo transmitido ao WhatsApp pode ser processado pela Meta e está
-          sujeito às políticas do serviço. Se você compartilhar outros dados durante a conversa,
-          eles serão tratados também conforme o atendimento prestado por esse canal.
+          Após a gravação confirmada ou a escolha do atendimento direto, o site abre o WhatsApp para
+          que você revise a mensagem. Abrir a conversa não envia a mensagem automaticamente: ela só
+          é enviada quando você confirma o envio no WhatsApp. O conteúdo transmitido ao WhatsApp
+          pode ser processado pela Meta e está sujeito às políticas do serviço. Se você compartilhar
+          outros dados durante a conversa, eles serão tratados também conforme o atendimento
+          prestado por esse canal.
         </p>
 
         <h2 className="pt-4 text-xl font-bold text-navy">Retenção e exclusão</h2>
