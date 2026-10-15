@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, LoaderCircle, Trash2 } from "lucide-react";
 import { useCatalog } from "@/lib/catalog-context";
 import { Button } from "@/components/ui/button";
 import { PageHero } from "@/components/site/Layout";
@@ -11,7 +11,7 @@ import {
   validateQuoteItemsAgainstCatalog,
   validateQuoteRequest,
 } from "@/lib/quote";
-import { calculateTotalUnits, openWhatsAppQuote, prepareQuoteForWhatsApp } from "@/lib/quote-model";
+import { calculateTotalUnits, prepareQuoteForWhatsApp } from "@/lib/quote-model";
 import { CloudflareTurnstile } from "@/components/site/CloudflareTurnstile";
 import { registerQuoteRequest } from "@/lib/quote.functions";
 
@@ -38,6 +38,36 @@ export const Route = createFileRoute("/orcamento")({
 const field =
   "h-11 w-full rounded-xl border border-input bg-background px-3 outline-none focus:ring-2 focus:ring-ring";
 
+function reserveWhatsAppTab(): Window | null {
+  try {
+    const popup = window.open("about:blank", "_blank");
+    if (!popup) return null;
+    popup.opener = null;
+    return popup;
+  } catch {
+    return null;
+  }
+}
+
+function navigateReservedTab(popup: Window | null, url: string): boolean {
+  if (!popup || popup.closed) return false;
+  try {
+    popup.location.replace(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function closeReservedTab(popup: Window | null) {
+  if (!popup || popup.closed) return;
+  try {
+    popup.close();
+  } catch {
+    return;
+  }
+}
+
 export function QuotePage() {
   const { items, remove, setQty, setVariation } = useQuote();
   const { config, products } = useCatalog();
@@ -48,6 +78,7 @@ export function QuotePage() {
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [registrationStarted, setRegistrationStarted] = useState(false);
+  const [registrationUnavailable, setRegistrationUnavailable] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [registrationId, setRegistrationId] = useState("");
   const [whatsAppUrl, setWhatsAppUrl] = useState("");
@@ -76,6 +107,7 @@ export function QuotePage() {
     }
 
     submitting.current = true;
+    const reservedTab = reserveWhatsAppTab();
     setIsSubmitting(true);
     setRegistrationStarted(true);
     setError("");
@@ -96,16 +128,31 @@ export function QuotePage() {
           turnstileToken,
         },
       });
+      if (!result.ok) {
+        closeReservedTab(reservedTab);
+        setRegistrationUnavailable(true);
+        setError("");
+        setStatus("");
+        setTurnstileToken("");
+        setTurnstileResetKey((key) => key + 1);
+        return;
+      }
       sessionStorage.removeItem(requestKeyStorageName);
       setRegistrationId(result.id);
-      setWhatsAppUrl(prepared.url);
+      const opened = navigateReservedTab(reservedTab, prepared.url);
+      if (!opened) closeReservedTab(reservedTab);
+      setWhatsAppUrl(opened ? "" : prepared.url);
       setStatus(
-        "Solicitação registrada. O registro não envia uma mensagem automaticamente. Você pode abrir a conversa pelo botão abaixo e confirmar o envio no WhatsApp.",
+        opened
+          ? "Solicitação registrada. A conversa foi aberta para você revisar e confirmar o envio no WhatsApp; nenhuma mensagem é enviada automaticamente."
+          : "Solicitação registrada. Não foi possível abrir a conversa automaticamente. Use o botão abaixo para abrir o WhatsApp e confirmar o envio.",
       );
     } catch {
+      closeReservedTab(reservedTab);
       setError(
-        "Não foi possível salvar o orçamento. Seus dados ainda não foram confirmados como registrados. Tente novamente; a mesma tentativa será protegida contra duplicação.",
+        "Não foi possível confirmar o resultado do registro. Tente novamente antes de continuar; a mesma tentativa será retomada para evitar duplicidade.",
       );
+      setStatus("");
       setTurnstileToken("");
       setTurnstileResetKey((key) => key + 1);
     } finally {
@@ -115,7 +162,9 @@ export function QuotePage() {
   }
 
   function openWhatsApp() {
-    if (!whatsAppUrl || !openWhatsAppQuote(whatsAppUrl)) {
+    const popup = whatsAppUrl ? reserveWhatsAppTab() : null;
+    if (!whatsAppUrl || !navigateReservedTab(popup, whatsAppUrl)) {
+      closeReservedTab(popup);
       setError(
         "O orçamento continua registrado, mas não foi possível abrir o WhatsApp. Tente novamente pelo botão.",
       );
@@ -130,14 +179,31 @@ export function QuotePage() {
       setError(prepared.error);
       return;
     }
-    if (!openWhatsAppQuote(prepared.url)) {
+    const popup = reserveWhatsAppTab();
+    if (!navigateReservedTab(popup, prepared.url)) {
+      closeReservedTab(popup);
       setError("Não foi possível abrir o WhatsApp. Tente novamente pelo botão.");
       return;
     }
     setError("");
     setStatus(
-      "A conversa foi aberta com os produtos da sua lista. Esta solicitação não foi registrada no painel; confirme o envio diretamente pelo WhatsApp.",
+      "O registro não foi confirmado e a solicitação poderá não aparecer no painel. Revise a mensagem e confirme o envio pelo WhatsApp.",
     );
+  }
+
+  function handleMainAction() {
+    if (registrationUnavailable) {
+      requestDirectlyOnWhatsApp();
+      return;
+    }
+    void submit();
+  }
+
+  function retryRegistration() {
+    setRegistrationUnavailable(false);
+    setError("");
+    setStatus("");
+    void submit();
   }
 
   return (
@@ -145,7 +211,7 @@ export function QuotePage() {
       <PageHero
         eyebrow="Orçamento"
         title="Sua lista de orçamento"
-        text="Informe quantidades, seus dados e envie a solicitação pelo WhatsApp."
+        text="Informe as quantidades e seus dados. Ao solicitar pelo WhatsApp, o orçamento será registrado antes da abertura da conversa, quando o registro estiver disponível."
       />
       <section className="mx-auto grid max-w-6xl gap-8 px-5 py-12 lg:grid-cols-[1fr_380px]">
         <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
@@ -358,25 +424,42 @@ export function QuotePage() {
               </div>
               <Button
                 variant="gold"
-                disabled={!!validationError || !turnstileToken || isSubmitting}
-                onClick={() => void submit()}
+                disabled={
+                  isSubmitting ||
+                  (!registrationUnavailable && (!!validationError || !turnstileToken))
+                }
+                onClick={handleMainAction}
+                aria-busy={isSubmitting}
                 className="mt-5 h-12 w-full min-w-0 max-w-full rounded-full px-3 text-center leading-tight whitespace-normal font-semibold"
               >
-                {registrationStarted ? "Tentar registrar novamente" : "Registrar orçamento"}
+                {isSubmitting && (
+                  <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" />
+                )}
+                <span aria-live="polite">
+                  {isSubmitting
+                    ? "Registrando orçamento..."
+                    : registrationUnavailable
+                      ? "Continuar pelo WhatsApp"
+                      : registrationStarted
+                        ? "Tentar registrar novamente"
+                        : "Solicitar orçamento pelo WhatsApp"}
+                </span>
               </Button>
-              <Button
-                variant="outline"
-                disabled={isSubmitting}
-                onClick={requestDirectlyOnWhatsApp}
-                className="mt-3 h-12 w-full min-w-0 max-w-full rounded-full border-primary-foreground/35 bg-transparent px-3 text-center leading-tight whitespace-normal text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
-              >
-                Solicitar orçamento pelo WhatsApp
-              </Button>
-              <p className="mt-2 text-xs text-primary-foreground/75">
-                Esta alternativa não exige seus dados pessoais e não registra a solicitação no
-                painel administrativo. A mensagem contém apenas os produtos selecionados; revise e
-                confirme o envio no WhatsApp.
-              </p>
+              {registrationUnavailable && (
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <p className="text-xs text-primary-foreground/75">
+                    O registro não foi confirmado; a solicitação poderá não aparecer no painel.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={isSubmitting || !!validationError || !turnstileToken}
+                    onClick={retryRegistration}
+                    className="shrink-0 text-xs text-primary-foreground/80 underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
+              )}
             </>
           )}
           {registrationId && (
@@ -384,13 +467,15 @@ export function QuotePage() {
               <p className="break-all rounded-xl border border-primary-foreground/20 bg-primary-foreground/10 p-3 text-sm">
                 Identificador do orçamento: <strong>{registrationId}</strong>
               </p>
-              <Button
-                variant="gold"
-                onClick={openWhatsApp}
-                className="h-12 w-full min-w-0 max-w-full rounded-full px-3 text-center leading-tight whitespace-normal font-semibold"
-              >
-                Abrir conversa no WhatsApp
-              </Button>
+              {whatsAppUrl && (
+                <Button
+                  variant="gold"
+                  onClick={openWhatsApp}
+                  className="h-12 w-full min-w-0 max-w-full rounded-full px-3 text-center leading-tight whitespace-normal font-semibold"
+                >
+                  Abrir WhatsApp
+                </Button>
+              )}
             </div>
           )}
           <div className="mt-5 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">

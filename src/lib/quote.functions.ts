@@ -23,6 +23,11 @@ const rateLimitMessage =
 const conflictMessage =
   "Esta tentativa já foi registrada com dados diferentes. Atualize a página para iniciar uma nova solicitação.";
 
+export type RegisterQuoteRequestResult =
+  { ok: true; id: string } | { ok: false; reason: "unavailable" };
+
+class QuoteRegistrationUnavailableError extends Error {}
+
 function createQuoteServiceClient() {
   const url = process.env["SUPABASE_URL"];
   const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
@@ -65,7 +70,8 @@ async function loadQuoteSnapshot(
     .from("catalog_products")
     .select("slug,category,active,data")
     .in("slug", slugs);
-  if (productsResult.error || productsResult.data.length !== slugs.length) {
+  if (productsResult.error) throw new QuoteRegistrationUnavailableError();
+  if (productsResult.data.length !== slugs.length) {
     throw new Error(
       "Um ou mais produtos não estão disponíveis no catálogo. Atualize a lista e tente novamente.",
     );
@@ -76,7 +82,7 @@ async function loadQuoteSnapshot(
     .from("catalog_categories")
     .select("slug,active")
     .in("slug", categorySlugs);
-  if (categoriesResult.error) throw new Error(unavailableMessage);
+  if (categoriesResult.error) throw new QuoteRegistrationUnavailableError();
 
   const result = buildQuoteRequestSnapshot(input, productsResult.data, categoriesResult.data);
   if (!result.ok) throw new Error(result.error);
@@ -86,23 +92,29 @@ async function loadQuoteSnapshot(
 export const registerQuoteRequest = createServerFn({ method: "POST" })
   .validator((value: unknown) => quoteSubmissionInputSchema.parse(value))
   .handler(async ({ data }) => {
+    if (process.env["QUOTE_REGISTRATION_ENABLED"] !== "true") {
+      return { ok: false, reason: "unavailable" } as const;
+    }
+
     return withQuoteRegistrationEnabled(process.env["QUOTE_REGISTRATION_ENABLED"], async () => {
       const serviceRoleKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+      const supabaseUrl = process.env["SUPABASE_URL"];
       const turnstileSecret = process.env["CLOUDFLARE_TURNSTILE_SECRET_KEY"];
       const expectedHostname = process.env["QUOTE_TURNSTILE_HOSTNAME"];
       const rateLimitSecret = process.env["QUOTE_RATE_LIMIT_HMAC_SECRET"];
       if (
         !serviceRoleKey ||
+        !supabaseUrl ||
         !turnstileSecret ||
         !expectedHostname ||
         !rateLimitSecret ||
         rateLimitSecret.length < 32
       ) {
-        throw new Error(unavailableMessage);
+        return { ok: false, reason: "unavailable" } as const;
       }
 
       const request = getRequest();
-      if (!request) throw new Error(unavailableMessage);
+      if (!request) return { ok: false, reason: "unavailable" } as const;
       const clientIp = readTrustedCloudflareIp(request);
       const db = createQuoteServiceClient();
 
@@ -117,7 +129,7 @@ export const registerQuoteRequest = createServerFn({ method: "POST" })
         if (!quoteRequestSnapshotMatches(existing.data.contact, existing.data.items, snapshot)) {
           throw new Error(conflictMessage);
         }
-        return { id: existing.data.id };
+        return { ok: true, id: existing.data.id } as const;
       }
 
       const verified = await verifyQuoteTurnstileToken(
@@ -136,7 +148,7 @@ export const registerQuoteRequest = createServerFn({ method: "POST" })
       const limitResult = await db.rpc("consume_quote_submission_rate_limit", {
         _client_key_hash: clientKeyHash,
       });
-      if (limitResult.error) throw new Error(unavailableMessage);
+      if (limitResult.error) throw new QuoteRegistrationUnavailableError();
       if (!limitResult.data) throw new Error(rateLimitMessage);
 
       const inserted = await db
@@ -159,10 +171,15 @@ export const registerQuoteRequest = createServerFn({ method: "POST" })
         if (!quoteRequestSnapshotMatches(duplicate.data.contact, duplicate.data.items, snapshot)) {
           throw new Error(conflictMessage);
         }
-        return { id: duplicate.data.id };
+        return { ok: true, id: duplicate.data.id } as const;
       }
       if (inserted.error || !inserted.data) throw new Error(unavailableMessage);
-      return { id: inserted.data.id };
+      return { ok: true, id: inserted.data.id } as const;
+    }).catch((error: unknown) => {
+      if (error instanceof QuoteRegistrationUnavailableError) {
+        return { ok: false, reason: "unavailable" } as const;
+      }
+      throw error;
     });
   });
 
