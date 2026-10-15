@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Database } from "@/integrations/supabase/types";
 import { verifyAdminRole } from "@/lib/admin-access";
+import { inspectQuoteRuntime } from "@/lib/quote-runtime-diagnostics";
 import {
   buildQuoteRequestSnapshot,
   hashQuoteClientIp,
@@ -210,4 +211,17 @@ export const updateQuoteRequestStatus = createServerFn({ method: "POST" })
     if (result.error) throw new Error("Não foi possível atualizar a situação do orçamento.");
     if (!result.data) throw new Error("O orçamento não foi encontrado ou não pode ser atualizado.");
     return { ok: true };
+  });
+
+export const getQuoteRuntimeDiagnostics = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await verifyAdminRole(() =>
+      context.supabase.rpc("has_role", {
+        _user_id: context.userId,
+        _role: "admin",
+      }),
+    );
+
+    return inspectQuoteRuntime(process.env, getRequest() ?? null);
   });
