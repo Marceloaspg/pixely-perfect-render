@@ -338,7 +338,7 @@ export function QuotePage() {
             className="mt-4 min-w-0 space-y-3 text-foreground disabled:opacity-80"
           >
             <label className="block text-sm">
-              Nome *
+              <span className="text-primary-foreground">Nome *</span>
               <input
                 aria-label="Nome"
                 autoComplete="off"
@@ -350,7 +350,7 @@ export function QuotePage() {
               />
             </label>
             <label className="block text-sm">
-              Empresa (opcional)
+              <span className="text-primary-foreground">Empresa (opcional)</span>
               <input
                 aria-label="Empresa"
                 autoComplete="off"
@@ -362,7 +362,7 @@ export function QuotePage() {
               />
             </label>
             <label className="block text-sm">
-              Cidade *
+              <span className="text-primary-foreground">Cidade *</span>
               <input
                 aria-label="Cidade"
                 autoComplete="off"
@@ -374,7 +374,7 @@ export function QuotePage() {
               />
             </label>
             <label className="block text-sm">
-              WhatsApp para contato *
+              <span className="text-primary-foreground">WhatsApp para contato *</span>
               <input
                 aria-label="WhatsApp para contato"
                 autoComplete="off"
@@ -387,7 +387,7 @@ export function QuotePage() {
               />
             </label>
             <label className="block text-sm">
-              E-mail (opcional)
+              <span className="text-primary-foreground">E-mail (opcional)</span>
               <input
                 aria-label="E-mail"
                 autoComplete="off"
@@ -400,7 +400,7 @@ export function QuotePage() {
               />
             </label>
             <label className="block text-sm">
-              Observações (opcional)
+              <span className="text-primary-foreground">Observações (opcional)</span>
               <textarea
                 aria-label="Observações"
                 autoComplete="off"
