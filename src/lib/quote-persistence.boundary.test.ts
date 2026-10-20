@@ -27,9 +27,11 @@ it("keeps registration behind a server function and does not expose database wri
   expect(quoteFunctions.indexOf("return withQuoteRegistrationEnabled")).toBeLessThan(
     quoteFunctions.indexOf('const serviceRoleKey = process.env["SUPABASE_SERVICE_ROLE_KEY"]'),
   );
-  expect(quoteFunctions).toContain("cloudflareRequest.cf");
-  expect(quoteFunctions).toContain('request.headers.get("cf-connecting-ip")');
+  expect(quoteFunctions).not.toContain("request.cf");
+  expect(quoteFunctions).toContain('getRequestHeader("cf-connecting-ip")');
+  expect(quoteFunctions).toContain("validateQuoteClientIp");
   expect(quoteFunctions).not.toContain("x-forwarded-for");
+  expect(quoteFunctions).not.toContain("x-real-ip");
   expect(quoteFunctions.indexOf("verifyQuoteTurnstileToken")).toBeLessThan(
     quoteFunctions.indexOf('rpc("consume_quote_submission_rate_limit"'),
   );
