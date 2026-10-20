@@ -79,6 +79,7 @@ export function QuotePage() {
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [registrationStarted, setRegistrationStarted] = useState(false);
   const [registrationUnavailable, setRegistrationUnavailable] = useState(false);
+  const [whatsAppFallbackOpened, setWhatsAppFallbackOpened] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [registrationId, setRegistrationId] = useState("");
   const [whatsAppUrl, setWhatsAppUrl] = useState("");
@@ -93,6 +94,10 @@ export function QuotePage() {
   const validationError =
     validateQuoteRequest(items, contact) ?? validateQuoteItemsAgainstCatalog(items, products);
   const updateTurnstileToken = useCallback((token: string) => setTurnstileToken(token), []);
+
+  function clearSelectedProducts() {
+    items.forEach((item) => remove(quoteItemKey(item)));
+  }
 
   async function submit() {
     if (submitting.current) return;
@@ -146,6 +151,7 @@ export function QuotePage() {
       setRegistrationId(result.id);
       const opened = navigateReservedTab(reservedTab, prepared.url);
       if (!opened) closeReservedTab(reservedTab);
+      else clearSelectedProducts();
       setWhatsAppUrl(opened ? "" : prepared.url);
       setStatus(
         opened
@@ -175,6 +181,7 @@ export function QuotePage() {
       );
       return;
     }
+    clearSelectedProducts();
     setError("");
   }
 
@@ -190,6 +197,8 @@ export function QuotePage() {
       setError("Não foi possível abrir o WhatsApp. Tente novamente pelo botão.");
       return;
     }
+    clearSelectedProducts();
+    setWhatsAppFallbackOpened(true);
     setError("");
     setStatus(
       "O registro não foi confirmado e a solicitação poderá não aparecer no painel. Revise a mensagem e confirme o envio pelo WhatsApp.",
@@ -417,12 +426,12 @@ export function QuotePage() {
               />
             </label>
           </fieldset>
-          {validationError && (
+          {!registrationId && !whatsAppFallbackOpened && validationError && (
             <p role="alert" className="mt-4 text-sm">
               {validationError}
             </p>
           )}
-          {!registrationId && (
+          {!registrationId && !whatsAppFallbackOpened && (
             <>
               <div className="mt-5">
                 <CloudflareTurnstile resetKey={turnstileResetKey} onToken={updateTurnstileToken} />
@@ -506,7 +515,7 @@ export function QuotePage() {
             </p>
           )}
           <p className="mt-3 text-xs text-primary-foreground/60">
-            A lista continua salva neste navegador. Abrir o WhatsApp não envia a mensagem
+            Sua lista é armazenada neste navegador. Abrir o WhatsApp não envia a mensagem
             automaticamente; revise e confirme o envio por lá. Consulte a{" "}
             <Link to="/privacidade" className="underline">
               política de privacidade

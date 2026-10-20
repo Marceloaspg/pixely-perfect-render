@@ -17,7 +17,7 @@ const quotePageMocks = vi.hoisted(() => ({
       material: "Papel kraft",
     },
   ],
-  remove: vi.fn(),
+  remove: vi.fn((_key: string) => undefined),
   setQty: vi.fn(),
   setVariation: vi.fn(),
   register: vi.fn(
@@ -99,14 +99,24 @@ vi.mock("@/lib/catalog-context", () => ({
 
 vi.mock("@/lib/quote", async () => {
   const actual = await vi.importActual<typeof import("@/lib/quote")>("@/lib/quote");
+  const { useEffect, useState } = await import("react");
   return {
     ...actual,
-    useQuote: () => ({
-      items: quotePageMocks.items,
-      remove: quotePageMocks.remove,
-      setQty: quotePageMocks.setQty,
-      setVariation: quotePageMocks.setVariation,
-    }),
+    useQuote: () => {
+      const [items, setItems] = useState(quotePageMocks.items);
+      useEffect(() => {
+        localStorage.setItem("majesta-orcamento", JSON.stringify(items));
+      }, [items]);
+      return {
+        items,
+        remove: (key: string) => {
+          quotePageMocks.remove(key);
+          setItems((current) => current.filter((item) => actual.quoteItemKey(item) !== key));
+        },
+        setQty: quotePageMocks.setQty,
+        setVariation: quotePageMocks.setVariation,
+      };
+    },
   };
 });
 
@@ -128,6 +138,16 @@ function createPopup() {
 
 describe("quote page actions", () => {
   beforeEach(() => {
+    quotePageMocks.items.splice(0, quotePageMocks.items.length, {
+      id: "caixa-grande",
+      slug: "caixa",
+      name: "Caixa para delivery",
+      quantity: "12",
+      variationId: "variation:grande",
+      variation: "Grande",
+      sku: "CX-001",
+      material: "Papel kraft",
+    });
     quotePageMocks.remove.mockClear();
     quotePageMocks.setQty.mockClear();
     quotePageMocks.setVariation.mockClear();
@@ -190,6 +210,16 @@ describe("quote page actions", () => {
   );
 
   it("registers first and opens the WhatsApp tab only after confirmation from the server", async () => {
+    quotePageMocks.items.push({
+      id: "caixa-pequena",
+      slug: "caixa",
+      name: "Caixa para delivery",
+      quantity: "4",
+      variationId: "variation:pequena",
+      variation: "Pequena",
+      sku: "CX-001",
+      material: "Papel kraft",
+    });
     render(<QuotePage />);
     const { popup, replace } = createPopup();
     vi.spyOn(window, "open").mockReturnValue(popup);
@@ -231,7 +261,10 @@ describe("quote page actions", () => {
       cidade: "Campinas",
       whatsapp: "(19) 99999-1234",
     });
-    expect(submitted.items).toEqual([{ slug: "caixa", variation: "Grande", quantity: "12" }]);
+    expect(submitted.items).toEqual([
+      { slug: "caixa", variation: "Grande", quantity: "12" },
+      { slug: "caixa", variation: "Pequena", quantity: "4" },
+    ]);
     expect(submitted.turnstileToken).toBe("test-turnstile-token");
     await act(async () =>
       confirmRegistration({ ok: true, id: "6d5f02e1-68cf-4622-a998-142a81bfbc20" }),
@@ -243,18 +276,23 @@ describe("quote page actions", () => {
     expect(url).toContain("https://wa.me/5519996145193?text=");
     const message = new URL(url).searchParams.get("text") ?? "";
     expect(message).toContain("CX-001");
+    expect(message).toContain("Caixa para delivery");
     expect(message).toContain("Grande");
+    expect(message).toContain("Pequena");
     expect(message).toContain("Papel kraft");
     expect(message).toContain("Quantidade: *12");
+    expect(message).toContain("Quantidade: *4");
     expect(message).toContain("Observações: Entrega em horário comercial.");
     expect(message).not.toMatch(/[\p{Extended_Pictographic}\p{Emoji_Presentation}]/u);
     expect(window.location.href).toBe(originalLocation);
-    expect(JSON.parse(localStorage.getItem("majesta-orcamento") ?? "[]")).toEqual(
-      quotePageMocks.items,
-    );
+    expect(quotePageMocks.remove).toHaveBeenCalledTimes(2);
+    expect(quotePageMocks.remove).toHaveBeenCalledWith("caixa-grande");
+    expect(quotePageMocks.remove).toHaveBeenCalledWith("caixa-pequena");
+    expect(JSON.parse(localStorage.getItem("majesta-orcamento") ?? "[]")).toEqual([]);
     expect(screen.getByText("Identificador do orçamento:").parentElement).toHaveTextContent(
       "6d5f02e1-68cf-4622-a998-142a81bfbc20",
     );
+    expect(screen.getByText(/Sua lista está vazia\./)).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(
       /nenhuma mensagem é enviada automaticamente/i,
     );
@@ -283,9 +321,44 @@ describe("quote page actions", () => {
     await screen.findByRole("button", { name: "Abrir WhatsApp" });
     expect(quotePageMocks.register).toHaveBeenCalledOnce();
     expect(screen.getByRole("status")).toHaveTextContent(/não foi possível abrir a conversa/i);
+    expect(quotePageMocks.remove).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem("majesta-orcamento") ?? "[]")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Abrir WhatsApp" }));
     expect(screen.getByRole("alert")).toHaveTextContent(/continua registrado/i);
+    expect(quotePageMocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("clears the selection when the customer later opens the registered quote in WhatsApp", async () => {
+    render(<QuotePage />);
+    const { popup, replace } = createPopup();
+    vi.spyOn(window, "open").mockReturnValueOnce(null).mockReturnValue(popup);
+
+    fireEvent.click(screen.getByRole("button", { name: "Concluir verificação antispam" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Nome" }), {
+      target: { value: "Ana Costa" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Cidade" }), {
+      target: { value: "Campinas" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "WhatsApp para contato" }), {
+      target: { value: "(19) 99999-1234" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Solicitar orçamento pelo WhatsApp" }));
+
+    await screen.findByRole("button", { name: "Abrir WhatsApp" });
+    expect(quotePageMocks.remove).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem("majesta-orcamento") ?? "[]")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir WhatsApp" }));
+
+    expect(replace).toHaveBeenCalledOnce();
+    expect(quotePageMocks.remove).toHaveBeenCalledWith("caixa-grande");
+    expect(JSON.parse(localStorage.getItem("majesta-orcamento") ?? "[]")).toEqual([]);
+    expect(screen.getByText("Identificador do orçamento:").parentElement).toHaveTextContent(
+      "6d5f02e1-68cf-4622-a998-142a81bfbc20",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(/solicitação registrada/i);
   });
 
   it("replaces the main action with a direct WhatsApp fallback only after explicit unavailability", async () => {
@@ -338,6 +411,7 @@ describe("quote page actions", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     const requestKey = sessionStorage.getItem("majesta-quote-request-key");
     expect(requestKey).toBeTruthy();
+    expect(quotePageMocks.remove).not.toHaveBeenCalled();
 
     fireEvent.click(fallbackButton);
     expect(quotePageMocks.register).toHaveBeenCalledOnce();
@@ -352,6 +426,36 @@ describe("quote page actions", () => {
     expect(message).not.toContain("ana@example.com");
     expect(message).not.toContain("Observação privada.");
     expect(screen.getByRole("status")).toHaveTextContent(/poderá não aparecer no painel/i);
+    expect(screen.queryByText("Identificador do orçamento:")).not.toBeInTheDocument();
+    expect(quotePageMocks.remove).toHaveBeenCalledWith("caixa-grande");
+    expect(JSON.parse(localStorage.getItem("majesta-orcamento") ?? "[]")).toEqual([]);
+    expect(screen.getByText(/Sua lista está vazia\./)).toBeInTheDocument();
+  });
+
+  it("preserves the quote when the explicit WhatsApp fallback window is blocked", async () => {
+    quotePageMocks.register.mockResolvedValueOnce({ ok: false, reason: "unavailable" });
+    render(<QuotePage />);
+    vi.spyOn(window, "open").mockReturnValue(null);
+
+    fireEvent.click(screen.getByRole("button", { name: "Concluir verificação antispam" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Nome" }), {
+      target: { value: "Ana Costa" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Cidade" }), {
+      target: { value: "Campinas" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "WhatsApp para contato" }), {
+      target: { value: "(19) 99999-1234" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Solicitar orçamento pelo WhatsApp" }));
+    await screen.findByRole("button", { name: "Continuar pelo WhatsApp" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Continuar pelo WhatsApp" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/não foi possível abrir o whatsapp/i);
+    expect(quotePageMocks.remove).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem("majesta-orcamento") ?? "[]")).toHaveLength(1);
+    expect(screen.queryByText("Identificador do orçamento:")).not.toBeInTheDocument();
   });
 
   it("allows a registration retry from the unavailable state with the same request key", async () => {
@@ -435,6 +539,8 @@ describe("quote page actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Concluir verificação antispam" }));
     expect(submitButton).toBeDisabled();
     expect(quotePageMocks.register).not.toHaveBeenCalled();
+    expect(quotePageMocks.remove).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem("majesta-orcamento") ?? "[]")).toHaveLength(1);
     expect(
       screen.queryByRole("button", { name: "Continuar pelo WhatsApp" }),
     ).not.toBeInTheDocument();
@@ -467,11 +573,13 @@ describe("quote page actions", () => {
     fireEvent.click(submitButton);
     fireEvent.click(submitButton);
     expect(quotePageMocks.register).toHaveBeenCalledOnce();
+    expect(quotePageMocks.remove).not.toHaveBeenCalled();
 
     await act(async () =>
       confirmRegistration({ ok: true, id: "6d5f02e1-68cf-4622-a998-142a81bfbc20" }),
     );
     expect(quotePageMocks.register).toHaveBeenCalledOnce();
+    expect(quotePageMocks.remove).not.toHaveBeenCalled();
   });
 
   it("keeps the same idempotency key when the customer retries a failed registration", async () => {
@@ -495,6 +603,8 @@ describe("quote page actions", () => {
     await screen.findByRole("alert");
     const firstRequestKey = quotePageMocks.register.mock.calls[0]![0].data.requestKey;
     expect(sessionStorage.getItem("majesta-quote-request-key")).toBe(firstRequestKey);
+    expect(quotePageMocks.remove).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem("majesta-orcamento") ?? "[]")).toHaveLength(1);
     expect(
       screen.queryByRole("button", { name: "Continuar pelo WhatsApp" }),
     ).not.toBeInTheDocument();
@@ -505,6 +615,8 @@ describe("quote page actions", () => {
 
     expect(quotePageMocks.register).toHaveBeenCalledTimes(2);
     expect(quotePageMocks.register.mock.calls[1]![0].data.requestKey).toBe(firstRequestKey);
+    expect(quotePageMocks.remove).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem("majesta-orcamento") ?? "[]")).toHaveLength(1);
   });
 
   it("keeps the same idempotency key after a rejected Turnstile token and requests a new challenge", async () => {
