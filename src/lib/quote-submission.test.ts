@@ -3,6 +3,7 @@ import { productDataSchema } from '@/data/catalog';
 import {
   buildQuoteRequestSnapshot,
   hashQuoteClientIp,
+  parseQuoteTurnstileHostnames,
   quoteRequestSnapshotMatches,
   quoteRequestStatusSchema,
   quoteSubmissionInputSchema,
@@ -248,46 +249,148 @@ describe('quote submission validation and snapshots', () => {
 });
 
 describe('Cloudflare Turnstile and rate-limit key protections', () => {
-  it('validates Turnstile success, hostname, and action using Siteverify server-side', async () => {
+  it('accepts only the configured exact hostnames and the required action', async () => {
+    const hostnames = parseQuoteTurnstileHostnames(
+      ' MajestaEmbalagens.com.br, WWW.MajestaEmbalagens.com.br, pixely-perfect-render.lovable.app ',
+      undefined,
+    );
+    expect(hostnames).toEqual([
+      'majestaembalagens.com.br',
+      'www.majestaembalagens.com.br',
+      'pixely-perfect-render.lovable.app',
+    ]);
+
+    for (const hostname of hostnames ?? []) {
+      const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        expect(String(_url)).toBe('https://challenges.cloudflare.com/turnstile/v0/siteverify');
+        const form = new URLSearchParams(String(init?.body));
+        expect(form.get('secret')).toBe('server-secret');
+        expect(form.get('response')).toBe('turnstile-token');
+        expect(form.get('remoteip')).toBe('203.0.113.9');
+        return new Response(JSON.stringify({
+          success: true,
+          hostname: hostname.toUpperCase(),
+          action: 'quote_registration',
+        }), { status: 200 });
+      });
+      await expect(verifyQuoteTurnstileToken(
+        'turnstile-token',
+        '203.0.113.9',
+        'server-secret',
+        hostnames ?? [],
+        fetcher,
+      )).resolves.toBe('verified');
+    }
+  });
+
+  it('rejects unknown and lookalike hostnames and an incorrect action', async () => {
+    const hostnames = [
+      'majestaembalagens.com.br',
+      'www.majestaembalagens.com.br',
+      'pixely-perfect-render.lovable.app',
+    ];
+    const responseFor = (hostname: string, action = 'quote_registration') =>
+      vi.fn(async () => new Response(JSON.stringify({
+        success: true,
+        hostname,
+        action,
+      }), { status: 200 }));
+
+    for (const hostname of ['attacker.example', 'majestaembalagens.com.br.attacker.example']) {
+      await expect(verifyQuoteTurnstileToken(
+        'token',
+        '203.0.113.9',
+        'secret',
+        hostnames,
+        responseFor(hostname),
+      )).resolves.toBe('rejected');
+    }
+    await expect(verifyQuoteTurnstileToken(
+      'token',
+      '203.0.113.9',
+      'secret',
+      hostnames,
+      responseFor('majestaembalagens.com.br', 'other_action'),
+    )).resolves.toBe('rejected');
+  });
+
+  it('prefers the new hostname list and falls back to the legacy variable only when absent', () => {
+    expect(parseQuoteTurnstileHostnames(
+      'majestaembalagens.com.br, www.majestaembalagens.com.br',
+      'pixely-perfect-render.lovable.app',
+    )).toEqual(['majestaembalagens.com.br', 'www.majestaembalagens.com.br']);
+    expect(parseQuoteTurnstileHostnames(
+      undefined,
+      ' PIXELY-PERFECT-RENDER.LOVABLE.APP ',
+    )).toEqual(['pixely-perfect-render.lovable.app']);
+  });
+
+  it('fails closed when the hostname configuration is missing, malformed, or contains a wildcard', () => {
+    expect(parseQuoteTurnstileHostnames(undefined, undefined)).toBeNull();
+    expect(parseQuoteTurnstileHostnames('', 'pixely-perfect-render.lovable.app')).toBeNull();
+    expect(parseQuoteTurnstileHostnames('*.lovable.app', undefined)).toBeNull();
+    expect(parseQuoteTurnstileHostnames('https://majestaembalagens.com.br', undefined)).toBeNull();
+  });
+
+  it('treats inconclusive Siteverify responses as unavailable and explicit rejection as rejected', async () => {
+    const rejected = vi.fn(async () => new Response(JSON.stringify({
+      success: false,
+      'error-codes': ['invalid-input-response'],
+    }), { status: 200 }));
+    const expired = vi.fn(async () => new Response(JSON.stringify({
+      success: false,
+      'error-codes': ['timeout-or-duplicate'],
+    }), { status: 200 }));
+    const unspecifiedFailure = vi.fn(async () => new Response(JSON.stringify({
+      success: false,
+    }), { status: 200 }));
+    const invalidSecret = vi.fn(async () => new Response(JSON.stringify({
+      success: false,
+      'error-codes': ['invalid-input-secret'],
+    }), { status: 200 }));
+    const malformed = vi.fn(async () => new Response('not-json', { status: 200 }));
+    const failedHttp = vi.fn(async () => new Response('', { status: 503 }));
+    const offline = vi.fn(async () => { throw new Error('offline'); });
+
+    await expect(verifyQuoteTurnstileToken(
+      'token', '203.0.113.9', 'secret', ['majestaembalagens.com.br'], rejected,
+    )).resolves.toBe('rejected');
+    await expect(verifyQuoteTurnstileToken(
+      'token', '203.0.113.9', 'secret', ['majestaembalagens.com.br'], expired,
+    )).resolves.toBe('rejected');
+    await expect(verifyQuoteTurnstileToken(
+      'token', '203.0.113.9', 'secret', ['majestaembalagens.com.br'], unspecifiedFailure,
+    )).resolves.toBe('unavailable');
+    await expect(verifyQuoteTurnstileToken(
+      'token', '203.0.113.9', 'secret', ['majestaembalagens.com.br'], invalidSecret,
+    )).resolves.toBe('unavailable');
+    await expect(verifyQuoteTurnstileToken(
+      'token', '203.0.113.9', 'secret', ['majestaembalagens.com.br'], malformed,
+    )).resolves.toBe('unavailable');
+    await expect(verifyQuoteTurnstileToken(
+      'token', '203.0.113.9', 'secret', ['majestaembalagens.com.br'], failedHttp,
+    )).resolves.toBe('unavailable');
+    await expect(verifyQuoteTurnstileToken(
+      'token', '203.0.113.9', 'secret', ['majestaembalagens.com.br'], offline,
+    )).resolves.toBe('unavailable');
+    await expect(verifyQuoteTurnstileToken(
+      'token', '203.0.113.9', 'secret', [], offline,
+    )).resolves.toBe('unavailable');
+  });
+
+  it('fails closed when Siteverify returns a malformed successful response', async () => {
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       expect(String(_url)).toBe('https://challenges.cloudflare.com/turnstile/v0/siteverify');
-      const form = new URLSearchParams(String(init?.body));
-      expect(form.get('secret')).toBe('server-secret');
-      expect(form.get('response')).toBe('turnstile-token');
-      expect(form.get('remoteip')).toBe('203.0.113.9');
-      return new Response(JSON.stringify({
-        success: true,
-        hostname: 'majesta.example',
-        action: 'quote_registration',
-      }), { status: 200 });
+      expect(new URLSearchParams(String(init?.body)).get('secret')).toBe('server-secret');
+      return new Response(JSON.stringify({ success: 'yes' }), { status: 200 });
     });
     await expect(verifyQuoteTurnstileToken(
       'turnstile-token',
       '203.0.113.9',
       'server-secret',
-      'majesta.example',
+      ['majestaembalagens.com.br'],
       fetcher,
-    )).resolves.toBe(true);
-    await expect(verifyQuoteTurnstileToken(
-      'turnstile-token',
-      '203.0.113.9',
-      'server-secret',
-      'wrong.example',
-      fetcher,
-    )).resolves.toBe(false);
-  });
-
-  it('fails closed when Siteverify is unavailable, fails, or has a wrong action', async () => {
-    const failed = vi.fn(async () => new Response(JSON.stringify({ success: false }), { status: 200 }));
-    const wrongAction = vi.fn(async () => new Response(JSON.stringify({
-      success: true,
-      hostname: 'majesta.example',
-      action: 'other',
-    }), { status: 200 }));
-    const offline = vi.fn(async () => { throw new Error('offline'); });
-    await expect(verifyQuoteTurnstileToken('token', '203.0.113.9', 'secret', 'majesta.example', failed)).resolves.toBe(false);
-    await expect(verifyQuoteTurnstileToken('token', '203.0.113.9', 'secret', 'majesta.example', wrongAction)).resolves.toBe(false);
-    await expect(verifyQuoteTurnstileToken('token', '203.0.113.9', 'secret', 'majesta.example', offline)).resolves.toBe(false);
+    )).resolves.toBe('unavailable');
   });
 
   it('derives an opaque HMAC key and rejects short rate-limit secrets', async () => {

@@ -506,4 +506,35 @@ describe("quote page actions", () => {
     expect(quotePageMocks.register).toHaveBeenCalledTimes(2);
     expect(quotePageMocks.register.mock.calls[1]![0].data.requestKey).toBe(firstRequestKey);
   });
+
+  it("keeps the same idempotency key after a rejected Turnstile token and requests a new challenge", async () => {
+    quotePageMocks.register
+      .mockResolvedValueOnce({ ok: false, reason: "turnstile_rejected" })
+      .mockResolvedValueOnce({ ok: true, id: "6d5f02e1-68cf-4622-a998-142a81bfbc20" });
+    render(<QuotePage />);
+    vi.spyOn(window, "open").mockReturnValue(null);
+
+    fireEvent.click(screen.getByRole("button", { name: "Concluir verificação antispam" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Nome" }), {
+      target: { value: "Ana Costa" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Cidade" }), {
+      target: { value: "Campinas" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "WhatsApp para contato" }), {
+      target: { value: "(19) 99999-1234" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Solicitar orçamento pelo WhatsApp" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/verificação antispam não foi aceita/i);
+    const firstRequestKey = quotePageMocks.register.mock.calls[0]![0].data.requestKey;
+    expect(sessionStorage.getItem("majesta-quote-request-key")).toBe(firstRequestKey);
+
+    fireEvent.click(screen.getByRole("button", { name: "Concluir verificação antispam" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tentar registrar novamente" }));
+    await screen.findByRole("button", { name: "Abrir WhatsApp" });
+
+    expect(quotePageMocks.register).toHaveBeenCalledTimes(2);
+    expect(quotePageMocks.register.mock.calls[1]![0].data.requestKey).toBe(firstRequestKey);
+  });
 });

@@ -93,16 +93,41 @@ const turnstileResponseSchema = z.object({
   success: z.boolean(),
   hostname: z.string().optional(),
   action: z.string().optional(),
+  "error-codes": z.array(z.string()).optional(),
 });
+
+const rejectedTurnstileErrorCodes = new Set([
+  "invalid-input-response",
+  "missing-input-response",
+  "timeout-or-duplicate",
+]);
+
+const hostnamePattern =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))+$/;
+
+export function parseQuoteTurnstileHostnames(
+  hostnames: string | undefined,
+  legacyHostname: string | undefined,
+): string[] | null {
+  const configured = hostnames !== undefined ? hostnames : legacyHostname;
+  if (configured === undefined) return null;
+
+  const normalized = configured.split(",").map((hostname) => hostname.trim().toLowerCase());
+  if (normalized.some((hostname) => !hostnamePattern.test(hostname))) return null;
+  return [...new Set(normalized)];
+}
+
+export type QuoteTurnstileVerification = "verified" | "rejected" | "unavailable";
 
 export async function verifyQuoteTurnstileToken(
   token: string,
   clientIp: string,
   secretKey: string,
-  expectedHostname: string,
+  expectedHostnames: readonly string[],
   fetcher: typeof fetch = fetch,
-): Promise<boolean> {
-  if (!token || !secretKey || !expectedHostname) return false;
+): Promise<QuoteTurnstileVerification> {
+  if (!secretKey || expectedHostnames.length === 0) return "unavailable";
+  if (!token) return "rejected";
   try {
     const response = await fetcher('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',
@@ -113,14 +138,21 @@ export async function verifyQuoteTurnstileToken(
         remoteip: clientIp,
       }),
     });
-    if (!response.ok) return false;
+    if (!response.ok) return "unavailable";
     const parsed = turnstileResponseSchema.safeParse(await response.json());
-    return parsed.success &&
-      parsed.data.success &&
-      parsed.data.hostname?.toLocaleLowerCase() === expectedHostname.toLocaleLowerCase() &&
-      parsed.data.action === 'quote_registration';
+    if (!parsed.success) return "unavailable";
+    if (!parsed.data.success) {
+      const errorCodes = parsed.data["error-codes"] ?? [];
+      return errorCodes.length > 0 && errorCodes.every((code) => rejectedTurnstileErrorCodes.has(code))
+        ? "rejected"
+        : "unavailable";
+    }
+    return expectedHostnames.includes(parsed.data.hostname?.trim().toLowerCase() ?? "") &&
+      parsed.data.action === 'quote_registration'
+      ? "verified"
+      : "rejected";
   } catch {
-    return false;
+    return "unavailable";
   }
 }
 

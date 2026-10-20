@@ -130,11 +130,16 @@ export function QuotePage() {
       });
       if (!result.ok) {
         closeReservedTab(reservedTab);
-        setRegistrationUnavailable(true);
-        setError("");
         setStatus("");
         setTurnstileToken("");
         setTurnstileResetKey((key) => key + 1);
+        if (result.reason === "turnstile_rejected") {
+          setRegistrationUnavailable(false);
+          setError("A verificação antispam não foi aceita. Conclua um novo desafio e tente novamente.");
+        } else {
+          setRegistrationUnavailable(true);
+          setError("");
+        }
         return;
       }
       sessionStorage.removeItem(requestKeyStorageName);
