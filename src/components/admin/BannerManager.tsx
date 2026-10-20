@@ -11,11 +11,13 @@ import {
   Save,
   Upload,
 } from "lucide-react";
+import hero from "@/assets/hero.jpg";
 import type { Product } from "@/data/catalog";
 import { Button } from "@/components/ui/button";
 import { ImageCropDialog } from "@/components/admin/ImageCropDialog";
 import {
   archiveHomepageBanner,
+  getHomepageBanners,
   getAdminHomepageBanners,
   reorderHomepageBanners,
   saveHomepageBanner,
@@ -23,6 +25,7 @@ import {
 } from "@/lib/catalog.functions";
 import {
   homepageBannerSchema,
+  homepageHeroFallbackContent,
   reorderHomepageBannerGroup,
   type HomepageBanner,
   type HomepageBannerType,
@@ -42,11 +45,18 @@ type BannerForm = {
   active: boolean;
   startsAt: string;
   endsAt: string;
+  preserveOriginalImage: boolean;
 };
 
 const bannersQuery = queryOptions({
   queryKey: ["admin-homepage-banners"],
   queryFn: () => getAdminHomepageBanners(),
+});
+
+const publicBannersQuery = queryOptions({
+  queryKey: ["homepage-banners"],
+  queryFn: () => getHomepageBanners(),
+  staleTime: 30_000,
 });
 
 function createForm(displayOrder: number, type: HomepageBannerType): BannerForm {
@@ -63,6 +73,7 @@ function createForm(displayOrder: number, type: HomepageBannerType): BannerForm 
     active: false,
     startsAt: "",
     endsAt: "",
+    preserveOriginalImage: false,
   };
 }
 
@@ -88,6 +99,7 @@ function toForm(banner: HomepageBanner): BannerForm {
     active: banner.active,
     startsAt: localDateTime(banner.startsAt),
     endsAt: localDateTime(banner.endsAt),
+    preserveOriginalImage: false,
   };
 }
 
@@ -104,6 +116,7 @@ async function fileToBase64(file: File): Promise<string> {
 export function BannerManager({ products }: { products: Product[] }) {
   const queryClient = useQueryClient();
   const { data: banners = [], isLoading, error: loadError } = useQuery(bannersQuery);
+  const { data: publicBanners = [] } = useQuery(publicBannersQuery);
   const uploadImage = useServerFn(uploadCatalogImage);
   const saveBanner = useServerFn(saveHomepageBanner);
   const archiveBanner = useServerFn(archiveHomepageBanner);
@@ -117,6 +130,9 @@ export function BannerManager({ products }: { products: Product[] }) {
   const [message, setMessage] = useState("");
   const ordered = [...banners].sort(
     (left, right) => left.displayOrder - right.displayOrder || left.id.localeCompare(right.id),
+  );
+  const hasCurrentInstitutionalBanner = publicBanners.some(
+    (banner) => banner.type === "institutional" && Boolean(banner.imageUrl),
   );
 
   useEffect(
@@ -145,6 +161,16 @@ export function BannerManager({ products }: { products: Product[] }) {
     setForm(createForm(ordered.length, type));
   }
 
+  function editOriginalHero() {
+    setMessage("");
+    setForm({
+      ...createForm(0, "institutional"),
+      ...homepageHeroFallbackContent,
+      active: true,
+      preserveOriginalImage: true,
+    });
+  }
+
   function startEdit(banner: HomepageBanner) {
     setMessage("");
     setForm(toForm(banner));
@@ -169,6 +195,7 @@ export function BannerManager({ products }: { products: Product[] }) {
           current && {
             ...current,
             [cropTarget === "desktop" ? "imagePath" : "mobileImagePath"]: result.path,
+            preserveOriginalImage: false,
           },
       );
       setMessage("Imagem enviada. Salve o banner para associá-la ao conteúdo.");
@@ -194,6 +221,8 @@ export function BannerManager({ products }: { products: Product[] }) {
     }
     const parsed = homepageBannerSchema.safeParse({
       ...form,
+      imagePath:
+        form.imagePath ?? (form.preserveOriginalImage ? "fallback-original-image" : null),
       startsAt: startsAt?.toISOString() ?? null,
       endsAt: endsAt?.toISOString() ?? null,
     });
@@ -204,7 +233,34 @@ export function BannerManager({ products }: { products: Product[] }) {
     setBusy(true);
     setMessage("Salvando banner...");
     try {
-      await saveBanner({ data: parsed.data });
+      let imagePath = form.imagePath;
+      if (!imagePath && form.preserveOriginalImage) {
+        setMessage("Preparando a imagem atual do banner...");
+        const response = await fetch(hero);
+        if (!response.ok) throw new Error("Não foi possível carregar a imagem original do banner.");
+        const blob = await response.blob();
+        if (blob.type !== "image/jpeg")
+          throw new Error("A imagem original do banner não está em um formato JPG válido.");
+        const originalFile = new File([blob], "majesta-hero-original.jpg", {
+          type: "image/jpeg",
+        });
+        const uploaded = await uploadImage({
+          data: {
+            purpose: "banner",
+            contentType: "image/jpeg",
+            base64: await fileToBase64(originalFile),
+          },
+        });
+        const originalImagePath = uploaded.path;
+        imagePath = originalImagePath;
+        setForm((current) =>
+          current
+            ? { ...current, imagePath: originalImagePath, preserveOriginalImage: false }
+            : current,
+        );
+        setPreviews((current) => ({ ...current, [originalImagePath]: hero }));
+      }
+      await saveBanner({ data: { ...parsed.data, imagePath } });
       setForm(null);
       for (const url of previewUrls.current) URL.revokeObjectURL(url);
       previewUrls.current.clear();
@@ -254,11 +310,17 @@ export function BannerManager({ products }: { products: Product[] }) {
 
   const linkedProduct = products.find((product) => product.slug === form?.productSlug);
   const formImage =
-    form?.type === "product" ? (linkedProduct?.image ?? "") : previewFor(form?.imagePath ?? null);
+    form?.type === "product"
+      ? (linkedProduct?.image ?? "")
+      : previewFor(form?.imagePath ?? null, form?.preserveOriginalImage ? hero : "");
   const formMobileImage = previewFor(form?.mobileImagePath ?? null, formImage);
-  const actionHref = form?.productSlug
-    ? `/produtos/${encodeURIComponent(form.productSlug)}`
-    : (form?.buttonHref ?? "");
+  const formButtonIsQuoteAction =
+    form?.buttonLabel.trim().toLowerCase() === "solicitar orçamento";
+  const actionHref = formButtonIsQuoteAction
+    ? ""
+    : form?.productSlug
+      ? `/produtos/${encodeURIComponent(form.productSlug)}`
+      : (form?.buttonHref ?? "");
 
   function renderBannerGroup(
     heading: string,
@@ -266,6 +328,7 @@ export function BannerManager({ products }: { products: Product[] }) {
     groupBanners: HomepageBanner[],
     group: "institutional" | "campaign",
   ) {
+    const editingVisibleFallback = group === "institutional" && !hasCurrentInstitutionalBanner;
     return (
       <section aria-labelledby={`banner-group-${group}`} className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -275,9 +338,17 @@ export function BannerManager({ products }: { products: Product[] }) {
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           </div>
-          <Button onClick={() => startNew(group)}>
-            <Plus className="mr-2 h-4 w-4" />
-            {group === "institutional" ? "Novo banner principal" : "Nova campanha ou novidade"}
+          <Button onClick={() => (editingVisibleFallback ? editOriginalHero() : startNew(group))}>
+            {editingVisibleFallback ? (
+              <Pencil className="mr-2 h-4 w-4" />
+            ) : (
+              <Plus className="mr-2 h-4 w-4" />
+            )}
+            {editingVisibleFallback
+              ? "Editar banner principal atual"
+              : group === "institutional"
+                ? "Novo banner principal"
+                : "Nova campanha ou novidade"}
           </Button>
         </div>
         <div className="divide-y divide-border rounded-2xl border border-border bg-card shadow-card">
@@ -375,7 +446,7 @@ export function BannerManager({ products }: { products: Product[] }) {
           {groupBanners.length === 0 && (
             <p className="p-8 text-center text-sm text-muted-foreground">
               {group === "institutional"
-                ? "Nenhum banner principal cadastrado. O banner institucional atual continuará como alternativa até a publicação de um banner elegível."
+                ? "O banner original ainda é exibido. Edite-o para começar a gerenciá-lo pelo painel."
                 : "Nenhuma campanha ou novidade cadastrada."}
             </p>
           )}
@@ -448,7 +519,13 @@ export function BannerManager({ products }: { products: Product[] }) {
         <div className="grid gap-6 rounded-2xl border border-border bg-card p-5 shadow-card lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.85fr)]">
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="font-bold text-navy">{form.id ? "Editar banner" : "Novo banner"}</h3>
+              <h3 className="font-bold text-navy">
+                {form.id
+                  ? "Editar banner"
+                  : form.preserveOriginalImage
+                    ? "Editar banner principal atual"
+                    : "Novo banner"}
+              </h3>
               <Button type="button" variant="ghost" disabled={busy} onClick={() => setForm(null)}>
                 Cancelar
               </Button>
@@ -555,7 +632,9 @@ export function BannerManager({ products }: { products: Product[] }) {
                         </label>
                       </Button>
                       <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                        Corte horizontal 16:9, otimizado antes do upload.
+                        {form.preserveOriginalImage
+                          ? "A imagem original será preservada no primeiro salvamento. Envie outra para substituí-la."
+                          : "Corte horizontal 16:9, otimizado antes do upload."}
                       </span>
                     </span>
                   </span>
@@ -697,36 +776,75 @@ export function BannerManager({ products }: { products: Product[] }) {
             <h3 className="text-sm font-bold uppercase tracking-wider text-gold">
               Pré-visualização
             </h3>
-            <div className="relative grid aspect-video grid-cols-[58%_42%] overflow-hidden rounded-2xl border border-border bg-white">
-              <picture className="relative block">
-                {formMobileImage && formMobileImage !== formImage && (
-                  <source media="(max-width: 639px)" srcSet={formMobileImage} />
-                )}
+            {form.type === "institutional" ? (
+              <div className="relative aspect-video overflow-hidden rounded-2xl bg-navy">
                 {formImage && (
-                  <img
-                    src={formImage}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
+                  <picture className="absolute inset-0">
+                    {formMobileImage && formMobileImage !== formImage && (
+                      <source media="(max-width: 639px)" srcSet={formMobileImage} />
+                    )}
+                    <img
+                      src={formImage}
+                      alt=""
+                      className="h-full w-full object-cover opacity-60"
+                    />
+                  </picture>
                 )}
-              </picture>
-              <div className="flex flex-col justify-center p-3 text-navy sm:p-5">
-                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-gold">
-                  Majesta Embalagens
-                </p>
-                <p className="mt-2 text-sm font-extrabold sm:text-xl">
-                  {form.title || "Título do banner"}
-                </p>
-                <p className="mt-2 line-clamp-3 text-[10px] text-muted-foreground sm:text-xs">
-                  {form.subtitle || "O subtítulo aparecerá nesta área da página inicial."}
-                </p>
-                {form.buttonLabel && (
-                  <span className="mt-3 w-fit rounded-full bg-gold px-3 py-1.5 text-[10px] font-bold text-navy sm:text-xs">
-                    {form.buttonLabel}
-                  </span>
-                )}
+                <div className="absolute inset-0 bg-gradient-to-r from-navy via-navy/85 to-navy/10" />
+                <div className="relative flex h-full flex-col justify-center p-4 text-primary-foreground sm:p-6">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-gold">
+                    A embalagem certa valoriza o seu negócio
+                  </p>
+                  <p className="mt-2 max-w-[75%] text-base font-extrabold sm:text-xl">
+                    {form.title || "Título do banner"}
+                  </p>
+                  <p className="mt-2 max-w-[75%] line-clamp-2 text-[10px] text-primary-foreground/80 sm:text-xs">
+                    {form.subtitle || "O subtítulo aparecerá nesta área da página inicial."}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {!formButtonIsQuoteAction && form.buttonLabel && (
+                      <span className="w-fit rounded-full bg-gold px-3 py-1.5 text-[10px] font-bold text-navy sm:text-xs">
+                        {form.buttonLabel}
+                      </span>
+                    )}
+                    <span className="w-fit rounded-full border border-primary-foreground/40 px-3 py-1.5 text-[10px] font-bold text-primary-foreground sm:text-xs">
+                      Solicitar orçamento
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="relative grid aspect-video grid-cols-[58%_42%] overflow-hidden rounded-2xl border border-border bg-white">
+                <picture className="relative block">
+                  {formMobileImage && formMobileImage !== formImage && (
+                    <source media="(max-width: 639px)" srcSet={formMobileImage} />
+                  )}
+                  {formImage && (
+                    <img
+                      src={formImage}
+                      alt=""
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  )}
+                </picture>
+                <div className="flex flex-col justify-center p-3 text-navy sm:p-5">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-gold">
+                    Majesta Embalagens
+                  </p>
+                  <p className="mt-2 text-sm font-extrabold sm:text-xl">
+                    {form.title || "Título do banner"}
+                  </p>
+                  <p className="mt-2 line-clamp-3 text-[10px] text-muted-foreground sm:text-xs">
+                    {form.subtitle || "O subtítulo aparecerá nesta área da página inicial."}
+                  </p>
+                  {form.buttonLabel && (
+                    <span className="mt-3 w-fit rounded-full bg-gold px-3 py-1.5 text-[10px] font-bold text-navy sm:text-xs">
+                      {form.buttonLabel}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
             {actionHref && form.buttonLabel && (
               <a
                 className="inline-flex text-sm font-semibold text-primary underline"

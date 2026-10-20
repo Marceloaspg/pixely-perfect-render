@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Product } from "@/data/catalog";
@@ -8,6 +8,7 @@ import { BannerManager } from "./BannerManager";
 const managerMocks = vi.hoisted(() => ({
   archive: vi.fn(),
   load: vi.fn(),
+  publicLoad: vi.fn(),
   reorder: vi.fn(),
   save: vi.fn(),
   upload: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock("@tanstack/react-start", () => ({
 
 vi.mock("@/lib/catalog.functions", () => ({
   archiveHomepageBanner: managerMocks.archive,
+  getHomepageBanners: managerMocks.publicLoad,
   getAdminHomepageBanners: managerMocks.load,
   reorderHomepageBanners: managerMocks.reorder,
   saveHomepageBanner: managerMocks.save,
@@ -52,10 +54,12 @@ function banner(id: string, title: string, type: HomepageBanner["type"]): Homepa
 
 function renderManager(banners: HomepageBanner[]) {
   managerMocks.load.mockResolvedValue(banners);
+  managerMocks.publicLoad.mockResolvedValue(banners);
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
   queryClient.setQueryData(["admin-homepage-banners"], banners);
+  queryClient.setQueryData(["homepage-banners"], banners);
   return render(
     <QueryClientProvider client={queryClient}>
       <BannerManager products={[] as Product[]} />
@@ -66,6 +70,7 @@ function renderManager(banners: HomepageBanner[]) {
 describe("BannerManager", () => {
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -91,11 +96,26 @@ describe("BannerManager", () => {
   it("locks new hero banners to the institutional group while keeping campaign types separate", () => {
     renderManager([]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Novo banner principal" }));
+    fireEvent.click(screen.getByRole("button", { name: "Editar banner principal atual" }));
     let typeSelect = screen.getByLabelText("Tipo de banner");
     expect(typeSelect).toBeDisabled();
     expect(within(typeSelect).getAllByRole("option")).toHaveLength(1);
     expect(within(typeSelect).getByRole("option", { name: "Banner principal" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Título *")).toHaveValue(
+      "Embalagens que valorizam seu produto e fortalecem seu negócio.",
+    );
+    expect(screen.getByLabelText("Subtítulo")).toHaveValue(
+      "Soluções em embalagens para hamburguerias, lanchonetes e delivery em Amparo e região.",
+    );
+    expect(screen.getByLabelText("Ativo (respeitando o período de exibição)")).toBeChecked();
+    expect(
+      screen.getByRole("complementary", { name: "Pré-visualização do banner" }).querySelector("img"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "A imagem original será preservada no primeiro salvamento. Envie outra para substituí-la.",
+      ),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     fireEvent.click(screen.getByRole("button", { name: "Nova campanha ou novidade" }));
@@ -104,5 +124,44 @@ describe("BannerManager", () => {
     expect(within(typeSelect).queryByRole("option", { name: "Banner principal" })).not.toBeInTheDocument();
     expect(within(typeSelect).getByRole("option", { name: "Campanha comercial" })).toBeInTheDocument();
     expect(within(typeSelect).getByRole("option", { name: "Produto em destaque" })).toBeInTheDocument();
+  });
+
+  it("copies and saves the original fallback only after the administrator saves it", async () => {
+    managerMocks.upload.mockResolvedValue({ path: "banners/original-hero.jpg" });
+    managerMocks.save.mockResolvedValue({ ok: true });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        blob: () =>
+          Promise.resolve(
+            new Blob([Uint8Array.from([0xff, 0xd8, 0xff, 0x00])], { type: "image/jpeg" }),
+          ),
+      }),
+    );
+    renderManager([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Editar banner principal atual" }));
+    expect(managerMocks.upload).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar banner" }));
+
+    await waitFor(() => expect(managerMocks.save).toHaveBeenCalledOnce());
+    expect(managerMocks.upload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ purpose: "banner", contentType: "image/jpeg" }),
+      }),
+    );
+    expect(managerMocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: "institutional",
+          active: true,
+          imagePath: "banners/original-hero.jpg",
+          title: "Embalagens que valorizam seu produto e fortalecem seu negócio.",
+          buttonLabel: "Conheça nossos produtos",
+          buttonHref: "/produtos",
+        }),
+      }),
+    );
   });
 });

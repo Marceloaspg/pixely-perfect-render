@@ -10,7 +10,7 @@ import { useQuote } from "@/lib/quote";
 
 const nav = [
   { to: "/", label: "Início" },
-  { to: "/categorias", label: "Categorias" },
+  { to: "/categorias", label: "Catálogo" },
   { to: "/produtos", label: "Produtos" },
   { to: "/sobre", label: "Sobre Nós" },
   { to: "/contato", label: "Contato" },

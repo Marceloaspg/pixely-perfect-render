@@ -100,7 +100,7 @@ describe('site header and footer', () => {
     const links = within(nav).getAllByRole('link');
     expect(links.map(link => link.textContent)).toEqual([
       'Início',
-      'Categorias',
+      'Catálogo',
       'Produtos',
       'Sobre Nós',
       'Contato',
@@ -114,11 +114,11 @@ describe('site header and footer', () => {
     render(<Header />);
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     const mobileNavigation = screen.getAllByRole('navigation')[1]!;
-    const categoriesLink = within(mobileNavigation).getByRole('link', { name: 'Categorias' });
-    expect(categoriesLink).toHaveAttribute('href', '/categorias');
+    const catalogLink = within(mobileNavigation).getByRole('link', { name: 'Catálogo' });
+    expect(catalogLink).toHaveAttribute('href', '/categorias');
     expect(within(mobileNavigation).queryByText('Soluções por Segmento')).not.toBeInTheDocument();
-    expect(within(mobileNavigation).queryByRole('button', { name: 'Categorias' })).not.toBeInTheDocument();
-    fireEvent.click(categoriesLink);
+    expect(within(mobileNavigation).queryByRole('button', { name: 'Catálogo' })).not.toBeInTheDocument();
+    fireEvent.click(catalogLink);
     expect(screen.getAllByRole('navigation')).toHaveLength(1);
   });
 
