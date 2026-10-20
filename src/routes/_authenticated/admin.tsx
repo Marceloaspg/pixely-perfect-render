@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate, useRouter, type ErrorComponentProps } fro
 import { useRef, useState } from 'react';
 import { queryOptions, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { getAdminCatalog, getUnreferencedImageReport, removeUnreferencedCatalogImages, reorderCatalogCategories, saveCatalogItem, uploadCatalogImage } from '@/lib/catalog.functions';
+import { getAdminCatalog, getUnreferencedImageReport, removeUnreferencedCatalogImages, reorderCatalogCategories, reorderCatalogProducts, saveCatalogItem, uploadCatalogImage } from '@/lib/catalog.functions';
 import { updateQuoteRequestStatus } from '@/lib/quote.functions';
 import { quoteRequestStatusLabels, quoteRequestStatusSchema, type QuoteRequestStatus } from '@/lib/quote-submission';
 import type { Json } from '@/integrations/supabase/types';
@@ -14,6 +14,7 @@ import { Plus, LogOut, Pencil, Upload, Save, Search, Image as ImageIcon, Trash2,
 import { ImageCropDialog } from '@/components/admin/ImageCropDialog';
 import { getAdminRouteErrorKind, getAdminRouteErrorMessage } from '@/lib/admin-access';
 import { BannerManager } from '@/components/admin/BannerManager';
+import { ProductOrderManager } from '@/components/admin/ProductOrderManager';
 import { z } from 'zod';
 
 const adminQuery=queryOptions({queryKey:['admin-catalog'],queryFn:()=>getAdminCatalog()});
@@ -63,6 +64,7 @@ function Admin(){
  const save=useServerFn(saveCatalogItem);
  const saveQuoteStatus=useServerFn(updateQuoteRequestStatus);
  const saveOrder=useServerFn(reorderCatalogCategories);
+ const saveProductOrder=useServerFn(reorderCatalogProducts);
  const uploadImage=useServerFn(uploadCatalogImage);
  const getImageReport=useServerFn(getUnreferencedImageReport);
  const removeImages=useServerFn(removeUnreferencedCatalogImages);
@@ -87,6 +89,7 @@ function Admin(){
  const [filterStatus,setFilterStatus]=useState<'all'|'active'|'inactive'|'demo'>('all');
  const [quoteFilter,setQuoteFilter]=useState<QuoteRequestStatus|'all'>('all');
  const [savingQuoteId,setSavingQuoteId]=useState('');
+ const [organizingProducts,setOrganizingProducts]=useState(false);
 
  const cats=data.catalog.categories;
  const orderedCats=sortCategories(cats);
@@ -124,6 +127,21 @@ function Admin(){
  async function refresh(){
    await qc.invalidateQueries({queryKey:['catalog']});
    await qc.invalidateQueries({queryKey:['admin-catalog']});
+ }
+
+ async function saveProductsOrder(slugs:string[]){
+   setBusy(true);
+   setMessage('');
+   try{
+     await saveProductOrder({data:{slugs}});
+     await qc.invalidateQueries({queryKey:['admin-catalog']});
+     setOrganizingProducts(false);
+     setMessage('Ordem dos produtos salva com sucesso.');
+   }catch(error){
+     setMessage(error instanceof Error?error.message:'Não foi possível salvar a ordem dos produtos.');
+   }finally{
+     setBusy(false);
+   }
  }
 
  function revokePreview(url=previewUrl) {
@@ -423,7 +441,7 @@ function Admin(){
 
     <div className="my-8 flex flex-wrap gap-2">
       {['Produtos','Categorias','Banners e Campanhas','Contato','Orçamentos'].map(t=>(
-        <Button key={t} disabled={busy} variant={tab===t?'default':'secondary'} onClick={async()=>{if(edit)await cancelEditor();setTab(t);setMessage('');}}>
+        <Button key={t} disabled={busy} variant={tab===t?'default':'secondary'} onClick={async()=>{if(edit)await cancelEditor();setOrganizingProducts(false);setTab(t);setMessage('');}}>
           {t}
         </Button>
       ))}
@@ -439,12 +457,22 @@ function Admin(){
 
     {/* ABA PRODUTOS - LISTAGEM */}
     {tab==='Produtos' && !edit && (
-      <>
+      organizingProducts ? (
+        <ProductOrderManager
+          products={data.catalog.products}
+          busy={busy}
+          onSave={(slugs)=>{void saveProductsOrder(slugs);}}
+          onCancel={()=>{setOrganizingProducts(false);setMessage('');}}
+        />
+      ) : <>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <Button onClick={startNewProduct} className="rounded-full bg-primary font-semibold text-primary-foreground hover:bg-navy-soft">
             <Plus className="h-4 w-4 mr-2" />Novo produto
           </Button>
           <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="outline" disabled={busy||data.catalog.products.length===0} onClick={()=>{setMessage('');setOrganizingProducts(true);}}>
+              Organizar produtos
+            </Button>
             <Button type="button" variant="outline" disabled={busy} onClick={generateImageReport}>Relatório de imagens não referenciadas</Button>
             <span className="text-sm text-muted-foreground">{filteredProducts.length} de {data.catalog.products.length} produto(s)</span>
           </div>

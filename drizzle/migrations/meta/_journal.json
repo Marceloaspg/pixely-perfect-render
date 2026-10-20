@@ -29,6 +29,13 @@
       "when": 1792025836755,
       "tag": "0003_quote_management",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792513334527,
+      "tag": "0004_admin_product_order",
+      "breakpoints": true
     }
   ]
 }

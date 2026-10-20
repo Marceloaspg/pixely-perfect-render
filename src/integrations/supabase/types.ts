@@ -34,18 +34,21 @@ export type Database = {
       }
       catalog_products: {
         Row: {
+          admin_order: number
           active: boolean
           category: string
           data: Json
           slug: string
         }
         Insert: {
+          admin_order?: number
           active?: boolean
           category: string
           data?: Json
           slug: string
         }
         Update: {
+          admin_order?: number
           active?: boolean
           category?: string
           data?: Json
@@ -226,6 +229,7 @@ export type Database = {
         Returns: boolean
       }
       reorder_homepage_banners: { Args: { _ids: string[] }; Returns: undefined }
+      reorder_catalog_products: { Args: { _slugs: string[] }; Returns: undefined }
       consume_quote_submission_rate_limit: {
         Args: { _client_key_hash: string }
         Returns: boolean
