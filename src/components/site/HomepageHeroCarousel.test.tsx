@@ -114,7 +114,43 @@ describe("HomepageHeroCarousel", () => {
     );
     expect(screen.getByRole("link", { name: "Solicitar orçamento" })).toHaveAttribute(
       "href",
-      "/orcamento",
+      `https://wa.me/5511999999999?text=${encodeURIComponent("Olá! Gostaria de solicitar um orçamento com a Majesta Embalagens.")}`,
+    );
+  });
+
+  it("uses the configured WhatsApp for quote actions and preserves other custom destinations", () => {
+    heroMocks.catalog.config.whatsapp = "5511888888888";
+    renderHero([
+      {
+        ...banner("10000000-0000-4000-8000-000000000001", "Banner institucional"),
+        buttonLabel: "Saiba mais",
+        buttonHref: "https://majesta.example/campanha",
+      },
+    ]);
+
+    expect(screen.getByRole("link", { name: "Saiba mais" })).toHaveAttribute(
+      "href",
+      "https://majesta.example/campanha",
+    );
+    expect(screen.getByRole("link", { name: "Solicitar orçamento" })).toHaveAttribute(
+      "href",
+      `https://wa.me/5511888888888?text=${encodeURIComponent("Olá! Gostaria de solicitar um orçamento com a Majesta Embalagens.")}`,
+    );
+  });
+
+  it("routes institutional actions labeled as quote requests to WhatsApp rather than the quote page", () => {
+    heroMocks.catalog.config.whatsapp = "5511777777777";
+    renderHero([
+      {
+        ...banner("10000000-0000-4000-8000-000000000001", "Banner institucional"),
+        buttonLabel: "Solicitar orçamento",
+        buttonHref: "/orcamento",
+      },
+    ]);
+
+    expect(screen.getByRole("link", { name: "Solicitar orçamento" })).toHaveAttribute(
+      "href",
+      `https://wa.me/5511777777777?text=${encodeURIComponent("Olá! Gostaria de solicitar um orçamento com a Majesta Embalagens.")}`,
     );
   });
 

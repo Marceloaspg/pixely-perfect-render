@@ -4,6 +4,13 @@ import type { Category, Product } from "@/data/catalog";
 export const homepageBannerTypes = ["institutional", "campaign", "product"] as const;
 export type HomepageBannerType = (typeof homepageBannerTypes)[number];
 
+export const homepageHeroFallbackContent = {
+  title: "Embalagens que valorizam seu produto e fortalecem seu negócio.",
+  subtitle: "Soluções em embalagens para hamburguerias, lanchonetes e delivery em Amparo e região.",
+  buttonLabel: "Conheça nossos produtos",
+  buttonHref: "/produtos",
+} as const;
+
 export const homepageBannerSchema = z
   .object({
     id: z.string().uuid().optional(),

@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
-import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import hero from "@/assets/hero.jpg";
 import { filterPublicCatalog } from "@/data/catalog";
 import { useCatalog } from "@/lib/catalog-context";
 import { getHomepageBanners } from "@/lib/catalog.functions";
-import { buildHomepageSlides, useHomepageFallback, type HomepageSlide } from "@/lib/homepage-banners";
+import {
+  buildHomepageSlides,
+  homepageHeroFallbackContent,
+  useHomepageFallback,
+  type HomepageSlide,
+} from "@/lib/homepage-banners";
+import { whatsappLink } from "@/lib/config";
 
 const publicBannersQuery = queryOptions({
   queryKey: ["homepage-banners"],
@@ -18,17 +23,14 @@ const publicBannersQuery = queryOptions({
 const fallbackSlide: HomepageSlide = {
   id: "institutional-fallback",
   type: "institutional",
-  title: "Embalagens que valorizam seu produto e fortalecem seu negócio.",
-  subtitle: "Soluções em embalagens para hamburguerias, lanchonetes e delivery em Amparo e região.",
   imageUrl: hero,
-  buttonLabel: "Conheça nossos produtos",
-  buttonHref: "/produtos",
+  ...homepageHeroFallbackContent,
   source: "fallback",
 };
 
 export function HomepageHeroCarousel() {
   const { data: banners = [] } = useQuery(publicBannersQuery);
-  const { products, categories } = useCatalog();
+  const { products, categories, config } = useCatalog();
   const publicCatalog = filterPublicCatalog(categories, products);
   const managedSlides = buildHomepageSlides(
     banners.filter((banner) => banner.type === "institutional"),
@@ -45,6 +47,11 @@ export function HomepageHeroCarousel() {
   const [focusWithin, setFocusWithin] = useState(false);
   const currentIndex = activeIndex % slides.length;
   const hasMultipleSlides = slides.length > 1;
+  const isWhatsappAction = (label: string) => label.trim().toLowerCase() === "solicitar orçamento";
+  const whatsappQuoteHref = whatsappLink(
+    "Olá! Gostaria de solicitar um orçamento com a Majesta Embalagens.",
+    config.whatsapp,
+  );
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -122,22 +129,28 @@ export function HomepageHeroCarousel() {
                   </p>
                 )}
                 <div className="mt-7 flex flex-wrap justify-center gap-3 md:justify-start">
-                  {slide.buttonLabel && slide.buttonHref && (
+                  {slide.buttonLabel &&
+                    slide.buttonHref &&
+                    !isWhatsappAction(slide.buttonLabel) && (
+                      <a
+                        href={slide.buttonHref}
+                        target={slide.buttonHref.startsWith("https://") ? "_blank" : undefined}
+                        rel={slide.buttonHref.startsWith("https://") ? "noreferrer" : undefined}
+                        className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3.5 font-bold text-navy transition hover:brightness-105"
+                      >
+                        {slide.buttonLabel} <ArrowRight className="h-4 w-4" />
+                      </a>
+                    )}
+                  {whatsappQuoteHref && (
                     <a
-                      href={slide.buttonHref}
-                      target={slide.buttonHref.startsWith("https://") ? "_blank" : undefined}
-                      rel={slide.buttonHref.startsWith("https://") ? "noreferrer" : undefined}
-                      className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3.5 font-bold text-navy transition hover:brightness-105"
+                      href={whatsappQuoteHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-primary-foreground/40 px-6 py-3.5 font-semibold text-primary-foreground transition hover:bg-primary-foreground/10"
                     >
-                      {slide.buttonLabel} <ArrowRight className="h-4 w-4" />
+                      Solicitar orçamento
                     </a>
                   )}
-                  <Link
-                    to="/orcamento"
-                    className="rounded-full border border-primary-foreground/40 px-6 py-3.5 font-semibold text-primary-foreground transition hover:bg-primary-foreground/10"
-                  >
-                    Solicitar orçamento
-                  </Link>
                 </div>
               </div>
             </div>
