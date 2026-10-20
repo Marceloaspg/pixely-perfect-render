@@ -112,7 +112,7 @@ function renderFeatured(
   eligibleSlugs: string[],
   categoryActive = true,
 ) {
-  const visibleCount = window.innerWidth >= 1024 ? 3 : window.innerWidth >= 640 ? 2 : 1;
+  const visibleCount = window.innerWidth >= 1024 ? 4 : window.innerWidth >= 640 ? 2 : 1;
   carouselHarness.state.snapCount = Math.max(1, products.length - visibleCount + 1);
   carouselHarness.state.selected = 0;
   featuredMocks.catalog = {
@@ -293,8 +293,9 @@ describe("FeaturedProductsCarousel", () => {
 
     const desktop = renderFeatured(products, slugs);
     expect(desktop.container.querySelector('[aria-roledescription="slide"]')).toHaveClass(
-      "basis-1/3",
+      "basis-1/4",
     );
+    expect(carouselHarness.state.snapCount).toBe(4);
     desktop.unmount();
     cleanup();
 
@@ -303,6 +304,7 @@ describe("FeaturedProductsCarousel", () => {
     expect(tablet.container.querySelector('[aria-roledescription="slide"]')).toHaveClass(
       "basis-1/2",
     );
+    expect(carouselHarness.state.snapCount).toBe(6);
     tablet.unmount();
     cleanup();
 
@@ -311,6 +313,7 @@ describe("FeaturedProductsCarousel", () => {
     expect(phone.container.querySelector('[aria-roledescription="slide"]')).toHaveClass(
       "basis-full",
     );
+    expect(carouselHarness.state.snapCount).toBe(7);
   });
 
   it("advances one snap every two seconds and returns to the first snap at the end", async () => {

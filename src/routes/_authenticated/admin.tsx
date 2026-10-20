@@ -3,8 +3,7 @@ import { useRef, useState } from 'react';
 import { queryOptions, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { getAdminCatalog, getUnreferencedImageReport, removeUnreferencedCatalogImages, reorderCatalogCategories, saveCatalogItem, uploadCatalogImage } from '@/lib/catalog.functions';
-import { getQuoteRuntimeDiagnostics, updateQuoteRequestStatus } from '@/lib/quote.functions';
-import type { QuoteRuntimeDiagnostics } from '@/lib/quote-runtime-diagnostics';
+import { updateQuoteRequestStatus } from '@/lib/quote.functions';
 import { quoteRequestStatusLabels, quoteRequestStatusSchema, type QuoteRequestStatus } from '@/lib/quote-submission';
 import type { Json } from '@/integrations/supabase/types';
 import { categoryDataSchema, categorySlugSchema, imageMap, productDataSchema, contactSchema, slugify, sortCategories, type Product, type Category, type SiteConfig } from '@/data/catalog';
@@ -63,7 +62,6 @@ function Admin(){
  const nav=useNavigate();
  const save=useServerFn(saveCatalogItem);
  const saveQuoteStatus=useServerFn(updateQuoteRequestStatus);
- const getRuntimeDiagnostics=useServerFn(getQuoteRuntimeDiagnostics);
  const saveOrder=useServerFn(reorderCatalogCategories);
  const uploadImage=useServerFn(uploadCatalogImage);
  const getImageReport=useServerFn(getUnreferencedImageReport);
@@ -74,8 +72,6 @@ function Admin(){
  const [kind,setKind]=useState<'product'|'category'>('product');
  const [contact,setContact]=useState<SiteConfig>(data.catalog.config);
  const [message,setMessage]=useState('');
- const [runtimeDiagnostics,setRuntimeDiagnostics]=useState<QuoteRuntimeDiagnostics|null>(null);
- const [diagnosticsBusy,setDiagnosticsBusy]=useState(false);
  const [busy,setBusy]=useState(false);
  const [previewUrl,setPreviewUrl]=useState<string>('');
  const [categorySlugEdited,setCategorySlugEdited]=useState(false);
@@ -128,19 +124,6 @@ function Admin(){
  async function refresh(){
    await qc.invalidateQueries({queryKey:['catalog']});
    await qc.invalidateQueries({queryKey:['admin-catalog']});
- }
-
- async function checkRuntimeDiagnostics(){
-   setDiagnosticsBusy(true);
-   setRuntimeDiagnostics(null);
-   setMessage('');
-   try{
-     setRuntimeDiagnostics(await getRuntimeDiagnostics());
-   }catch{
-     setMessage('Não foi possível consultar o diagnóstico. Confirme que a sessão é administrativa e tente novamente.');
-   }finally{
-     setDiagnosticsBusy(false);
-   }
  }
 
  function revokePreview(url=previewUrl) {
@@ -439,7 +422,7 @@ function Admin(){
     </header>
 
     <div className="my-8 flex flex-wrap gap-2">
-      {['Produtos','Categorias','Banners e Campanhas','Contato','Orçamentos','Diagnóstico do ambiente'].map(t=>(
+      {['Produtos','Categorias','Banners e Campanhas','Contato','Orçamentos'].map(t=>(
         <Button key={t} disabled={busy} variant={tab===t?'default':'secondary'} onClick={async()=>{if(edit)await cancelEditor();setTab(t);setMessage('');}}>
           {t}
         </Button>
@@ -453,37 +436,6 @@ function Admin(){
     )}
 
     {tab==='Banners e Campanhas' && !edit && <BannerManager products={data.catalog.products} />}
-
-    {tab==='Diagnóstico do ambiente' && !edit && (
-      <div className="max-w-3xl rounded-2xl border border-border bg-card p-6 shadow-card">
-        <h2 className="text-xl font-bold text-navy">Diagnóstico temporário do servidor</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Consulta somente indicadores de configuração. Não lê nem altera registros de orçamento e não retorna valores de chaves.</p>
-        <Button className="mt-4" disabled={diagnosticsBusy} onClick={()=>void checkRuntimeDiagnostics()}>
-          {diagnosticsBusy?'Consultando...':'Consultar ambiente'}
-        </Button>
-        {runtimeDiagnostics && (
-          <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-            {([
-              ['SUPABASE_SERVICE_ROLE_KEY',runtimeDiagnostics.supabaseServiceRoleKeyConfigured],
-              ['SUPABASE_URL',runtimeDiagnostics.supabaseUrlConfigured],
-              ['SUPABASE_PUBLISHABLE_KEY',runtimeDiagnostics.supabasePublishableKeyConfigured],
-              ['CLOUDFLARE_TURNSTILE_SECRET_KEY',runtimeDiagnostics.turnstileSecretKeyConfigured],
-              ['QUOTE_TURNSTILE_HOSTNAME configurado',runtimeDiagnostics.turnstileHostnameConfigured],
-              ['Hostname igual ao esperado',runtimeDiagnostics.turnstileHostnameMatchesExpected],
-              ['QUOTE_RATE_LIMIT_HMAC_SECRET (mín. 32 caracteres)',runtimeDiagnostics.rateLimitHmacSecretConfigured],
-              ['Metadados nativos Cloudflare presentes',runtimeDiagnostics.cloudflareWorkerMetadataPresent],
-              ['Cabeçalho CF-Connecting-IP presente',runtimeDiagnostics.cfConnectingIpHeaderPresent],
-            ] as Array<[string,boolean]>).map(([label,configured])=>(
-              <div key={label} className="rounded-xl border border-border p-3">
-                <dt className="text-sm font-medium">{label}</dt>
-                <dd className={configured?'mt-1 text-sm font-semibold text-green-700':'mt-1 text-sm font-semibold text-destructive'}>{configured?'Presente':'Ausente'}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-        <p className="mt-5 text-sm text-muted-foreground">Hostname esperado do Turnstile: <code>pixely-perfect-render.lovable.app</code>. A presença de metadados ou do cabeçalho não comprova que o IP veio de uma origem confiável. A rota e a sanitização desses dados precisam ser confirmadas com a infraestrutura Lovable/Cloudflare antes de habilitar o registro. Este diagnóstico é temporário e deve ser removido após a validação.</p>
-      </div>
-    )}
 
     {/* ABA PRODUTOS - LISTAGEM */}
     {tab==='Produtos' && !edit && (

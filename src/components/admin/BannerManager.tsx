@@ -23,6 +23,7 @@ import {
 } from "@/lib/catalog.functions";
 import {
   homepageBannerSchema,
+  reorderHomepageBannerGroup,
   type HomepageBanner,
   type HomepageBannerType,
 } from "@/lib/homepage-banners";
@@ -48,9 +49,9 @@ const bannersQuery = queryOptions({
   queryFn: () => getAdminHomepageBanners(),
 });
 
-function createForm(displayOrder: number): BannerForm {
+function createForm(displayOrder: number, type: HomepageBannerType): BannerForm {
   return {
-    type: "institutional",
+    type,
     title: "",
     subtitle: "",
     imagePath: null,
@@ -139,9 +140,9 @@ export function BannerManager({ products }: { products: Product[] }) {
     await queryClient.invalidateQueries({ queryKey: ["homepage-banners"] });
   }
 
-  function startNew() {
+  function startNew(type: "institutional" | "campaign") {
     setMessage("");
-    setForm(createForm(ordered.length));
+    setForm(createForm(ordered.length, type));
   }
 
   function startEdit(banner: HomepageBanner) {
@@ -234,11 +235,8 @@ export function BannerManager({ products }: { products: Product[] }) {
   }
 
   async function moveBanner(id: string, direction: -1 | 1) {
-    const index = ordered.findIndex((banner) => banner.id === id);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= ordered.length) return;
-    const next = [...ordered];
-    [next[index], next[target]] = [next[target]!, next[index]!];
+    const next = reorderHomepageBannerGroup(ordered, id, direction);
+    if (next.every((banner, index) => banner.id === ordered[index]?.id)) return;
     setBusy(true);
     setMessage("");
     try {
@@ -262,58 +260,28 @@ export function BannerManager({ products }: { products: Product[] }) {
     ? `/produtos/${encodeURIComponent(form.productSlug)}`
     : (form?.buttonHref ?? "");
 
-  return (
-    <section className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-navy">Banners e Campanhas</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Gerencie conteúdo da página inicial. Produtos em destaque elegíveis também aparecem
-            automaticamente.
-          </p>
-        </div>
-        {!form && (
-          <Button onClick={startNew}>
+  function renderBannerGroup(
+    heading: string,
+    description: string,
+    groupBanners: HomepageBanner[],
+    group: "institutional" | "campaign",
+  ) {
+    return (
+      <section aria-labelledby={`banner-group-${group}`} className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 id={`banner-group-${group}`} className="text-lg font-bold text-navy">
+              {heading}
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          </div>
+          <Button onClick={() => startNew(group)}>
             <Plus className="mr-2 h-4 w-4" />
-            Novo banner
-          </Button>
-        )}
-      </div>
-
-      {message && (
-        <p
-          role="status"
-          className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm font-medium text-navy"
-        >
-          {message}
-        </p>
-      )}
-      {loadError && (
-        <div
-          role="alert"
-          className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm"
-        >
-          <p>
-            Não foi possível carregar os banners.{" "}
-            {loadError instanceof Error ? loadError.message : ""}
-          </p>
-          <Button variant="outline" className="mt-3" onClick={() => void refreshBanners()}>
-            Tentar novamente
+            {group === "institutional" ? "Novo banner principal" : "Nova campanha ou novidade"}
           </Button>
         </div>
-      )}
-      {isLoading && (
-        <p
-          role="status"
-          className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground"
-        >
-          Carregando banners...
-        </p>
-      )}
-
-      {!isLoading && !loadError && !form && (
         <div className="divide-y divide-border rounded-2xl border border-border bg-card shadow-card">
-          {ordered.map((banner, index) => {
+          {groupBanners.map((banner, index) => {
             const image =
               banner.imageUrl ||
               products.find((product) => product.slug === banner.productSlug)?.image ||
@@ -340,7 +308,7 @@ export function BannerManager({ products }: { products: Product[] }) {
                       variant="ghost"
                       size="icon"
                       aria-label={`Mover ${banner.title} para baixo`}
-                      disabled={busy || index === ordered.length - 1}
+                      disabled={busy || index === groupBanners.length - 1}
                       onClick={() => void moveBanner(banner.id, 1)}
                     >
                       <ArrowDown className="h-4 w-4" />
@@ -363,11 +331,7 @@ export function BannerManager({ products }: { products: Product[] }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate font-bold text-navy">{banner.title}</p>
                     <span className="rounded bg-secondary px-2 py-0.5 text-xs capitalize">
-                      {banner.type === "campaign"
-                        ? "Campanha"
-                        : banner.type === "product"
-                          ? "Produto"
-                          : "Institucional"}
+                      {banner.type === "campaign" ? "Campanha" : banner.type === "product" ? "Produto" : "Institucional"}
                     </span>
                     <span
                       className={`text-xs font-semibold ${banner.archivedAt ? "text-muted-foreground" : banner.active ? "text-emerald-600" : "text-amber-600"}`}
@@ -408,11 +372,74 @@ export function BannerManager({ products }: { products: Product[] }) {
               </article>
             );
           })}
-          {ordered.length === 0 && (
+          {groupBanners.length === 0 && (
             <p className="p-8 text-center text-sm text-muted-foreground">
-              Nenhum banner cadastrado. O hero institucional atual continuará sendo exibido até a
-              publicação de conteúdo elegível.
+              {group === "institutional"
+                ? "Nenhum banner principal cadastrado. O banner institucional atual continuará como alternativa até a publicação de um banner elegível."
+                : "Nenhuma campanha ou novidade cadastrada."}
             </p>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-5">
+      <div>
+        <div>
+          <h2 className="text-xl font-bold text-navy">Banners e Campanhas</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Gerencie conteúdo da página inicial. Produtos em destaque elegíveis também aparecem
+            automaticamente.
+          </p>
+        </div>
+      </div>
+
+      {message && (
+        <p
+          role="status"
+          className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm font-medium text-navy"
+        >
+          {message}
+        </p>
+      )}
+      {loadError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm"
+        >
+          <p>
+            Não foi possível carregar os banners.{" "}
+            {loadError instanceof Error ? loadError.message : ""}
+          </p>
+          <Button variant="outline" className="mt-3" onClick={() => void refreshBanners()}>
+            Tentar novamente
+          </Button>
+        </div>
+      )}
+      {isLoading && (
+        <p
+          role="status"
+          className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground"
+        >
+          Carregando banners...
+        </p>
+      )}
+
+      {!isLoading && !loadError && !form && (
+        <div className="space-y-8">
+          {renderBannerGroup(
+            "Banner principal",
+            "Gerencie os slides do topo da página inicial. O banner atual permanece como alternativa enquanto não houver conteúdo elegível.",
+            ordered.filter((banner) => banner.type === "institutional"),
+            "institutional",
+          )}
+          {renderBannerGroup(
+            "Campanhas e novidades",
+            "Gerencie campanhas e banners de produtos nesta área, sem misturar o conteúdo do banner principal.",
+            ordered.filter((banner) => banner.type !== "institutional"),
+            "campaign",
           )}
         </div>
       )}
@@ -431,13 +458,20 @@ export function BannerManager({ products }: { products: Product[] }) {
               <select
                 className="admin-input mt-1"
                 value={form.type}
+                disabled={!!form.id || form.type === "institutional"}
                 onChange={(event) =>
                   setForm({ ...form, type: event.target.value as HomepageBannerType })
                 }
               >
-                <option value="institutional">Institucional</option>
-                <option value="campaign">Campanha comercial</option>
-                <option value="product">Produto em destaque</option>
+                {form.type === "institutional" && (
+                  <option value="institutional">Banner principal</option>
+                )}
+                {form.type !== "institutional" && (
+                  <>
+                    <option value="campaign">Campanha comercial</option>
+                    <option value="product">Produto em destaque</option>
+                  </>
+                )}
               </select>
             </label>
             <label className="block text-sm font-semibold">
@@ -663,32 +697,31 @@ export function BannerManager({ products }: { products: Product[] }) {
             <h3 className="text-sm font-bold uppercase tracking-wider text-gold">
               Pré-visualização
             </h3>
-            <div className="relative aspect-video overflow-hidden rounded-2xl bg-navy">
-              {formImage && (
-                <picture>
-                  {formMobileImage && formMobileImage !== formImage && (
-                    <source media="(max-width: 639px)" srcSet={formMobileImage} />
-                  )}
+            <div className="relative grid aspect-video grid-cols-[58%_42%] overflow-hidden rounded-2xl border border-border bg-white">
+              <picture className="relative block">
+                {formMobileImage && formMobileImage !== formImage && (
+                  <source media="(max-width: 639px)" srcSet={formMobileImage} />
+                )}
+                {formImage && (
                   <img
                     src={formImage}
                     alt=""
                     className="absolute inset-0 h-full w-full object-cover"
                   />
-                </picture>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-r from-navy via-navy/80 to-navy/10" />
-              <div className="relative flex h-full flex-col justify-center p-6 text-primary-foreground sm:p-8">
+                )}
+              </picture>
+              <div className="flex flex-col justify-center p-3 text-navy sm:p-5">
                 <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-gold">
                   Majesta Embalagens
                 </p>
-                <p className="mt-2 max-w-[75%] text-xl font-extrabold sm:text-2xl">
+                <p className="mt-2 text-sm font-extrabold sm:text-xl">
                   {form.title || "Título do banner"}
                 </p>
-                <p className="mt-2 max-w-[70%] text-xs text-primary-foreground/80 sm:text-sm">
+                <p className="mt-2 line-clamp-3 text-[10px] text-muted-foreground sm:text-xs">
                   {form.subtitle || "O subtítulo aparecerá nesta área da página inicial."}
                 </p>
                 {form.buttonLabel && (
-                  <span className="mt-4 w-fit rounded-full bg-gold px-4 py-2 text-xs font-bold text-navy">
+                  <span className="mt-3 w-fit rounded-full bg-gold px-3 py-1.5 text-[10px] font-bold text-navy sm:text-xs">
                     {form.buttonLabel}
                   </span>
                 )}

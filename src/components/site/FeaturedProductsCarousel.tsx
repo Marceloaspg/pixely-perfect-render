@@ -72,7 +72,7 @@ export function FeaturedProductsCarousel() {
 
   useEffect(() => {
     const updateSlidesPerPage = () => {
-      setSlidesPerPage(window.innerWidth >= 1024 ? 3 : window.innerWidth >= 640 ? 2 : 1);
+      setSlidesPerPage(window.innerWidth >= 1024 ? 4 : window.innerWidth >= 640 ? 2 : 1);
     };
     updateSlidesPerPage();
     window.addEventListener("resize", updateSlidesPerPage);
@@ -200,7 +200,7 @@ export function FeaturedProductsCarousel() {
           </h2>
         </div>
 
-        <div className="mx-auto flex w-full max-w-[1040px] items-center justify-center gap-2">
+        <div className="mx-auto flex w-full max-w-[1240px] items-center justify-center gap-2">
           {hasMultipleSnaps && (
             <Button
               type="button"
@@ -216,7 +216,7 @@ export function FeaturedProductsCarousel() {
 
           <div
             ref={viewportRef}
-            className="min-w-0 flex-1 overflow-hidden pb-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-4 sm:max-w-[616px] lg:max-w-[920px]"
+            className="min-w-0 flex-1 overflow-hidden pb-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-4 sm:max-w-[616px] lg:max-w-[1160px]"
             role="region"
             aria-roledescription="carrossel"
             aria-label="Produtos em destaque"
@@ -232,7 +232,7 @@ export function FeaturedProductsCarousel() {
                       ? "basis-full"
                       : slidesPerPage === 2
                         ? "basis-1/2"
-                        : "basis-1/3"
+                        : "basis-1/4"
                   }`}
                   role="group"
                   aria-roledescription="slide"
