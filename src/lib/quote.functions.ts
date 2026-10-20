@@ -8,6 +8,7 @@ import { verifyAdminRole } from "@/lib/admin-access";
 import {
   buildQuoteRequestSnapshot,
   hashQuoteClientIp,
+  parseQuoteTurnstileHostnames,
   quoteSubmissionInputSchema,
   quoteRequestSnapshotMatches,
   verifyQuoteTurnstileToken,
@@ -25,7 +26,8 @@ const conflictMessage =
   "Esta tentativa já foi registrada com dados diferentes. Atualize a página para iniciar uma nova solicitação.";
 
 export type RegisterQuoteRequestResult =
-  { ok: true; id: string } | { ok: false; reason: "unavailable" };
+  | { ok: true; id: string }
+  | { ok: false; reason: "unavailable" | "turnstile_rejected" };
 
 class QuoteRegistrationUnavailableError extends Error {}
 
@@ -81,13 +83,16 @@ export const registerQuoteRequest = createServerFn({ method: "POST" })
       const serviceRoleKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
       const supabaseUrl = process.env["SUPABASE_URL"];
       const turnstileSecret = process.env["CLOUDFLARE_TURNSTILE_SECRET_KEY"];
-      const expectedHostname = process.env["QUOTE_TURNSTILE_HOSTNAME"];
+      const expectedHostnames = parseQuoteTurnstileHostnames(
+        process.env["QUOTE_TURNSTILE_HOSTNAMES"],
+        process.env["QUOTE_TURNSTILE_HOSTNAME"],
+      );
       const rateLimitSecret = process.env["QUOTE_RATE_LIMIT_HMAC_SECRET"];
       if (
         !serviceRoleKey ||
         !supabaseUrl ||
         !turnstileSecret ||
-        !expectedHostname ||
+        !expectedHostnames ||
         !rateLimitSecret ||
         rateLimitSecret.length < 32
       ) {
@@ -117,12 +122,12 @@ export const registerQuoteRequest = createServerFn({ method: "POST" })
         data.turnstileToken,
         clientIp,
         turnstileSecret,
-        expectedHostname,
+        expectedHostnames,
       );
-      if (!verified)
-        throw new Error(
-          "Não foi possível validar a proteção antispam. Atualize o desafio e tente novamente.",
-        );
+      if (verified === "rejected") {
+        return { ok: false, reason: "turnstile_rejected" } as const;
+      }
+      if (verified === "unavailable") throw new QuoteRegistrationUnavailableError();
 
       const snapshot = await loadQuoteSnapshot(db, data);
       const clientKeyHash = await hashQuoteClientIp(clientIp, rateLimitSecret);
