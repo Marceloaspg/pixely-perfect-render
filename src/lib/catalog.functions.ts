@@ -8,6 +8,7 @@ import { collectReferencedImagePaths, findUnreferencedImagePaths, uploadValidate
 import { verifyAdminRole, SupabaseServiceUnavailableError } from '@/lib/admin-access';
 import { applySignedCatalogImageUrls, signCatalogImagePaths } from '@/lib/catalog-image-signing';
 import { filterEligibleHomepageBanners, getEligibleFeaturedProductSlugs, homepageBannerSchema, type HomepageBanner, type HomepageProductEligibilityRecord } from '@/lib/homepage-banners';
+import { persistAdminProductOrder, sortCatalogProducts } from '@/lib/catalog-product-order';
 
 export const getCatalog = createServerFn({method:'GET'}).handler(async ():Promise<CatalogData>=>{
  const url=process.env['SUPABASE_URL']; const key=process.env['SUPABASE_PUBLISHABLE_KEY'];
@@ -20,7 +21,9 @@ async function readCatalog(db:ReturnType<typeof createClient<Database>>,admin:bo
  const [cats,ps,cs]=await Promise.all([db.from('catalog_categories').select('*'),db.from('catalog_products').select('*'),db.from('contact_settings').select('data').eq('id',1).single()]);
  if(cats.error||ps.error||cs.error) throw new Error('Não foi possível carregar o catálogo.');
  const categories=(cats.data??[]).map(r=>({...categoryDataSchema.parse(r.data),slug:r.slug,active:r.active,image:''}));
- const products=(ps.data??[]).map(r=>({...productDataSchema.parse(r.data),slug:r.slug,category:r.category,active:r.active,image:'',additionalImages:[] as string[]}));
+ const productRows=ps.data??[];
+ const adminOrderBySlug=new Map(productRows.map(row=>[row.slug,row.admin_order]));
+ const products=productRows.map(r=>({...productDataSchema.parse(r.data),slug:r.slug,category:r.category,active:r.active,image:'',additionalImages:[] as string[]}));
  const visible=selectCatalogAudience(categories,products,admin);
  const imagePaths=[...new Set([
   ...visible.categories.map(category=>category.imagePath),
@@ -33,7 +36,8 @@ async function readCatalog(db:ReturnType<typeof createClient<Database>>,admin:bo
   for(const [path,url] of signedUrls)signedUrls.set(path,url.replace(serverUrl,browserUrl));
  }
  const {categories:categoriesWithImages,products:productsWithImages}=applySignedCatalogImageUrls(visible.categories,visible.products,signedUrls);
- return {categories:sortCategories(categoriesWithImages),products:productsWithImages.sort((a,b)=>a.order-b.order),config:contactSchema.parse(cs.data?.data)};
+ const orderedProducts=sortCatalogProducts(productsWithImages,adminOrderBySlug,admin);
+ return {categories:sortCategories(categoriesWithImages),products:orderedProducts,config:contactSchema.parse(cs.data?.data)};
 }
 
 const adminMiddleware= requireSupabaseAuth;
@@ -69,6 +73,14 @@ export const saveCatalogItem=createServerFn({method:'POST'}).middleware([adminMi
  const category=await context.supabase.from('catalog_categories').select('slug').eq('slug',data.category).maybeSingle();
  if(category.error)throw new Error('Não foi possível verificar a categoria do produto.');
  if(!category.data)throw new Error('A categoria selecionada não existe mais. Atualize o painel e tente novamente.');
+ const existingProduct=await context.supabase.from('catalog_products').select('admin_order').eq('slug',data.slug).maybeSingle();
+ if(existingProduct.error)throw new Error('Não foi possível verificar a posição administrativa do produto.');
+ let adminOrder=existingProduct.data?.admin_order;
+ if(adminOrder===undefined||adminOrder===null){
+  const lastProduct=await context.supabase.from('catalog_products').select('admin_order').order('admin_order',{ascending:false}).limit(1).maybeSingle();
+  if(lastProduct.error)throw new Error('Não foi possível determinar a posição do novo produto.');
+  adminOrder=(lastProduct.data?.admin_order??-1)+1;
+ }
  const targetSku=data.data.sku?data.data.sku.trim().toLowerCase():'';
  if(targetSku){
   const existing=await context.supabase.from('catalog_products').select('slug, data').neq('slug',data.slug);
@@ -83,8 +95,19 @@ export const saveCatalogItem=createServerFn({method:'POST'}).middleware([adminMi
    }
   }
  }
- const r=await context.supabase.from('catalog_products').upsert({slug:data.slug,category:data.category,active:data.active,data:data.data as Json});
+ const r=await context.supabase.from('catalog_products').upsert({slug:data.slug,category:data.category,active:data.active,data:data.data as Json,admin_order:adminOrder});
  if(r.error)throw new Error('Não foi possível salvar.');
+ return {ok:true};
+});
+
+export const reorderCatalogProducts=createServerFn({method:'POST'}).middleware([adminMiddleware]).validator((v:unknown)=>z.object({
+ slugs:z.array(slug).max(10_000),
+}).parse(v)).handler(async({data,context})=>{
+ await persistAdminProductOrder(
+  data.slugs,
+  ()=>verifyAdminRole(()=>context.supabase.rpc('has_role',{_user_id:context.userId,_role:'admin'})),
+  ()=>context.supabase.rpc('reorder_catalog_products',{_slugs:data.slugs}).then(({error})=>({error})),
+ );
  return {ok:true};
 });
 export const reorderCatalogCategories=createServerFn({method:'POST'}).middleware([adminMiddleware]).validator((v:unknown)=>z.object({slugs:z.array(slug).min(1).max(500)}).parse(v)).handler(async({data,context})=>{
