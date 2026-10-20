@@ -1,11 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Layers, Headphones, ClipboardCheck, Store } from "lucide-react";
-import hero from "@/assets/hero.jpg";
 import { filterPublicCatalog } from "@/data/catalog";
 import { useCatalog } from "@/lib/catalog-context";
 import { whatsappLink } from "@/lib/config";
 import { FeaturedProductsCarousel } from "@/components/site/FeaturedProductsCarousel";
 import { HomepageCarousel } from "@/components/site/HomepageCarousel";
+import { HomepageHeroCarousel } from "@/components/site/HomepageHeroCarousel";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -59,43 +59,7 @@ function Index() {
   const publicCategories = filterPublicCatalog(categories, []).categories;
   return (
     <>
-      <section className="relative overflow-hidden bg-navy">
-        <img
-          src={hero}
-          alt="Composição de embalagens para delivery: caixas, sacos kraft e embalagens para alimentos"
-          width={1600}
-          height={1008}
-          className="absolute inset-0 h-full w-full object-cover opacity-60"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-navy via-navy/85 to-navy/10" />
-        <div className="relative mx-auto max-w-7xl px-5 py-24 md:py-36">
-          <div className="mx-auto max-w-2xl animate-rise text-center text-primary-foreground md:mx-0 md:text-left">
-            <p className="text-center text-xs font-bold uppercase tracking-[0.3em] text-gold md:text-left">
-              A embalagem certa valoriza o seu negócio
-            </p>
-            <h1 className="mt-5 text-center text-4xl font-extrabold leading-[1.05] tracking-tight md:text-left md:text-6xl">
-              Embalagens que valorizam seu produto e fortalecem seu negócio.
-            </h1>
-            <p className="mt-6 text-center text-lg text-primary-foreground/80 md:text-left">
-              Soluções em embalagens para hamburguerias, lanchonetes e delivery em Amparo e região.
-            </p>
-            <div className="mt-9 flex flex-wrap justify-center gap-3 md:justify-start">
-              <Link
-                to="/produtos"
-                className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3.5 font-bold text-navy transition hover:brightness-105"
-              >
-                Conheça nossos produtos <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                to="/orcamento"
-                className="rounded-full border border-primary-foreground/40 px-6 py-3.5 font-semibold text-primary-foreground transition hover:bg-primary-foreground/10"
-              >
-                Solicitar orçamento
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
+      <HomepageHeroCarousel />
 
       <FeaturedProductsCarousel />
       <HomepageCarousel />

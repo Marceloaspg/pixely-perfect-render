@@ -20,6 +20,20 @@ vi.mock("@/components/site/HomepageCarousel", () => ({
   HomepageCarousel: () => null,
 }));
 
+vi.mock("@/components/site/HomepageHeroCarousel", () => ({
+  HomepageHeroCarousel: () => (
+    <section>
+      <h1 className="text-center md:text-left">
+        Embalagens que valorizam seu produto e fortalecem seu negócio.
+      </h1>
+      <div className="flex flex-wrap justify-center gap-3 md:justify-start">
+        <a href="/produtos">Conheça nossos produtos</a>
+        <a href="/orcamento">Solicitar orçamento</a>
+      </div>
+    </section>
+  ),
+}));
+
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => ({ options }),
   Link: ({

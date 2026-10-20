@@ -6,6 +6,7 @@ import {
   getEligibleFeaturedProductSlugs,
   homepageBannerSchema,
   isSafeBannerHref,
+  reorderHomepageBannerGroup,
   useHomepageFallback,
   type HomepageBanner,
   type HomepageSlide,
@@ -98,6 +99,36 @@ describe("homepage banner validation", () => {
     expect(isSafeBannerHref("/\\evil.example")).toBe(false);
     expect(isSafeBannerHref("data:text/html,alert(1)")).toBe(false);
     expect(isSafeBannerHref("https://user:password@example.com")).toBe(false);
+  });
+});
+
+describe("homepage banner administration", () => {
+  it("reorders within the selected hero or campaign group without crossing group boundaries", () => {
+    const banners = [
+      banner({ id: "hero-1", type: "institutional" }),
+      banner({ id: "campaign-1", displayOrder: 1 }),
+      banner({ id: "hero-2", type: "institutional", displayOrder: 2 }),
+      banner({ id: "product-1", type: "product", displayOrder: 3 }),
+      banner({ id: "campaign-2", displayOrder: 4 }),
+    ];
+
+    expect(reorderHomepageBannerGroup(banners, "hero-2", -1).map((item) => item.id)).toEqual([
+      "hero-2",
+      "campaign-1",
+      "hero-1",
+      "product-1",
+      "campaign-2",
+    ]);
+    expect(reorderHomepageBannerGroup(banners, "campaign-2", -1).map((item) => item.id)).toEqual([
+      "hero-1",
+      "campaign-1",
+      "hero-2",
+      "campaign-2",
+      "product-1",
+    ]);
+    expect(reorderHomepageBannerGroup(banners, "hero-1", -1).map((item) => item.id)).toEqual(
+      banners.map((item) => item.id),
+    );
   });
 });
 

@@ -64,6 +64,26 @@ export type HomepageBanner = HomepageBannerDraft & {
   archivedAt: string | null;
 };
 
+export function reorderHomepageBannerGroup<T extends Pick<HomepageBanner, "id" | "type">>(
+  banners: readonly T[],
+  id: string,
+  direction: -1 | 1,
+): T[] {
+  const isInstitutional = banners.find((banner) => banner.id === id)?.type === "institutional";
+  const group = banners.filter(
+    (banner) => (banner.type === "institutional") === isInstitutional,
+  );
+  const index = group.findIndex((banner) => banner.id === id);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= group.length) return [...banners];
+
+  [group[index], group[target]] = [group[target]!, group[index]!];
+  let groupIndex = 0;
+  return banners.map((banner) =>
+    (banner.type === "institutional") === isInstitutional ? group[groupIndex++]! : banner,
+  );
+}
+
 export type HomepageSlide = {
   id: string;
   type: HomepageBannerType;

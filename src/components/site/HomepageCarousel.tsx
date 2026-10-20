@@ -27,7 +27,7 @@ export function HomepageCarousel() {
   const { products, categories } = useCatalog();
   const publicCatalog = filterPublicCatalog(categories, products);
   const slides = buildHomepageSlides(
-    banners,
+    banners.filter((banner) => banner.type !== "institutional"),
     publicCatalog.products,
     publicCatalog.categories,
     Date.now(),
@@ -63,7 +63,7 @@ export function HomepageCarousel() {
 
   useEffect(() => {
     if (!hasMultipleSlides || reducedMotion || autoplayPaused || interactionActive) return;
-    const timer = setTimeout(() => setActiveIndex((index) => (index + 1) % slides.length), 7000);
+    const timer = setTimeout(() => setActiveIndex((index) => (index + 1) % slides.length), 5000);
     return () => clearTimeout(timer);
   }, [
     activeIndex,
@@ -120,7 +120,7 @@ export function HomepageCarousel() {
   if (!slides.length) return null;
 
   return (
-    <section className="bg-secondary py-14 md:py-18">
+    <section className="bg-white py-14 md:py-18">
       <div className="mx-auto max-w-7xl px-5">
         <div className="mb-7 flex items-end justify-between gap-4">
           <div>
@@ -157,7 +157,7 @@ export function HomepageCarousel() {
         <div
           className="relative overflow-hidden rounded-3xl bg-navy"
           aria-label="Campanhas da Majesta Embalagens"
-          aria-roledescription="carrossel"
+          aria-roledescription={hasMultipleSlides ? "carrossel" : undefined}
           role="region"
           tabIndex={0}
           onKeyDown={handleKeyDown}
@@ -172,31 +172,20 @@ export function HomepageCarousel() {
           onPointerUp={handlePointerUp}
           onPointerCancel={() => setPointerStart(null)}
         >
-          <div className="relative aspect-[4/3] min-h-[400px] w-full md:aspect-[16/7] md:min-h-[460px]">
+          <div className="relative min-h-[560px] w-full sm:min-h-[580px] md:min-h-[520px] lg:min-h-[460px]">
             {slides.map((slide, index) => (
               <article
                 key={slide.id}
-                className={`absolute inset-0 transition-opacity duration-700 motion-reduce:transition-none ${index === currentIndex ? "opacity-100" : "pointer-events-none opacity-0"}`}
+                className={`absolute inset-0 grid grid-rows-[minmax(0,1fr)_auto] overflow-hidden rounded-3xl border border-border bg-white shadow-card transition-opacity duration-700 motion-reduce:transition-none md:grid-cols-[58%_42%] md:grid-rows-1 ${index === currentIndex ? "opacity-100" : "pointer-events-none opacity-0"}`}
                 aria-hidden={index !== currentIndex}
                 inert={index !== currentIndex}
                 aria-roledescription="slide"
                 aria-label={`${index + 1} de ${slides.length}: ${slide.title}`}
               >
-                {slide.mobileImageUrl && (
-                  <picture>
+                <picture className="relative block min-h-[220px] sm:min-h-[250px] md:min-h-0">
+                  {slide.mobileImageUrl && (
                     <source media="(max-width: 639px)" srcSet={slide.mobileImageUrl} />
-                    <img
-                      src={slide.imageUrl}
-                      alt=""
-                      width={1600}
-                      height={900}
-                      loading={index === currentIndex ? "eager" : "lazy"}
-                      fetchPriority={index === currentIndex ? "high" : "auto"}
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
-                  </picture>
-                )}
-                {!slide.mobileImageUrl && (
+                  )}
                   <img
                     src={slide.imageUrl}
                     alt=""
@@ -204,30 +193,29 @@ export function HomepageCarousel() {
                     height={900}
                     loading={index === currentIndex ? "eager" : "lazy"}
                     fetchPriority={index === currentIndex ? "high" : "auto"}
-                    className="absolute inset-0 h-full w-full object-cover opacity-60"
+                    className="absolute inset-0 h-full w-full object-cover"
                   />
-                )}
-                <div className="absolute inset-0 bg-gradient-to-r from-navy via-navy/85 to-navy/10" />
-                <div className="relative mx-auto flex h-full max-w-7xl items-center px-5 py-16">
-                  <div className="max-w-2xl text-primary-foreground">
+                </picture>
+                <div className="flex flex-col justify-center px-6 pb-14 pt-6 text-navy sm:px-8 md:px-7 lg:px-10">
+                  <div>
                     <p className="text-xs font-bold uppercase tracking-[0.3em] text-gold">
                       Majesta Embalagens
                     </p>
-                    <h2 className="mt-5 text-3xl font-extrabold leading-[1.05] tracking-tight md:text-6xl">
+                    <h2 className="mt-3 text-2xl font-extrabold leading-tight tracking-tight sm:text-3xl lg:text-4xl">
                       {slide.title}
                     </h2>
                     {slide.subtitle && (
-                      <p className="mt-6 text-base text-primary-foreground/80 md:text-lg">
+                      <p className="mt-4 line-clamp-5 text-sm text-muted-foreground sm:text-base">
                         {slide.subtitle}
                       </p>
                     )}
                     {slide.buttonLabel && slide.buttonHref && (
-                      <div className="mt-8 flex flex-wrap gap-3">
+                      <div className="mt-5 flex flex-wrap gap-3">
                         <a
                           href={slide.buttonHref}
                           target={slide.buttonHref.startsWith("https://") ? "_blank" : undefined}
                           rel={slide.buttonHref.startsWith("https://") ? "noreferrer" : undefined}
-                          className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3.5 font-bold text-navy transition hover:brightness-105"
+                          className="inline-flex items-center gap-2 rounded-full bg-gold px-5 py-3 font-bold text-navy transition hover:brightness-105"
                         >
                           {slide.buttonLabel}
                           <ArrowRightIcon />
@@ -241,7 +229,7 @@ export function HomepageCarousel() {
 
             {hasMultipleSlides && (
               <>
-                <div className="absolute bottom-5 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-navy/65 px-3 py-2">
+                <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2 rounded-full bg-navy/10 px-3 py-2">
                   {slides.map((slide, index) => (
                     <button
                       key={slide.id}
@@ -249,7 +237,7 @@ export function HomepageCarousel() {
                       aria-label={`Mostrar campanha ${index + 1} de ${slides.length}`}
                       aria-current={index === currentIndex ? "true" : undefined}
                       onClick={() => goTo(index)}
-                      className={`h-2.5 rounded-full transition-all ${index === currentIndex ? "w-7 bg-gold" : "w-2.5 bg-white/70 hover:bg-white"}`}
+                      className={`h-2.5 rounded-full transition-all ${index === currentIndex ? "w-7 bg-gold" : "w-2.5 bg-navy/35 hover:bg-navy/60"}`}
                     />
                   ))}
                 </div>

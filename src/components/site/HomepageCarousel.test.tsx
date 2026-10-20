@@ -169,7 +169,7 @@ describe("HomepageCarousel", () => {
     expect(firstHeading).toBeInTheDocument();
   });
 
-  it("rotates through multiple banners every seven seconds", async () => {
+  it("rotates through multiple banners every five seconds", async () => {
     const banners = [
       banner("10000000-0000-4000-8000-000000000001", "Campanha um"),
       banner("10000000-0000-4000-8000-000000000002", "Campanha dois"),
@@ -179,7 +179,7 @@ describe("HomepageCarousel", () => {
     await act(async () => {});
     expect(screen.getByRole("heading", { name: "Campanha um" })).toBeInTheDocument();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(7000);
+      await vi.advanceTimersByTimeAsync(5000);
     });
     expect(screen.getByRole("heading", { name: "Campanha dois" })).toBeInTheDocument();
   });
@@ -200,9 +200,24 @@ describe("HomepageCarousel", () => {
     expect(screen.getByRole("heading", { name: "Campanha um" })).toBeInTheDocument();
     fireEvent.mouseLeave(region);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(7000);
+      await vi.advanceTimersByTimeAsync(5000);
     });
     expect(screen.getByRole("heading", { name: "Campanha dois" })).toBeInTheDocument();
+  });
+
+  it("keeps institutional slides out of the campaigns section and uses a white exterior", async () => {
+    homepageMocks.banners.mockResolvedValue([
+      banner("10000000-0000-4000-8000-000000000001", "Campanha"),
+      {
+        ...banner("10000000-0000-4000-8000-000000000002", "Hero institucional"),
+        type: "institutional",
+      },
+    ]);
+    renderCarousel();
+    const heading = await screen.findByRole("heading", { name: "Campanhas e novidades" });
+    expect(heading.closest("section")).toHaveClass("bg-white");
+    expect(screen.getByRole("heading", { name: "Campanha" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Hero institucional" })).not.toBeInTheDocument();
   });
 
   it("does not autoplay when reduced motion is preferred", async () => {
