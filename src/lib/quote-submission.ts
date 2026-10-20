@@ -36,6 +36,25 @@ export const quoteSubmissionInputSchema = z.object({
 
 export type QuoteSubmissionInput = z.infer<typeof quoteSubmissionInputSchema>;
 
+export function validateQuoteClientIp(ipHeader: string | null | undefined): string {
+  const ip = ipHeader?.trim();
+  const isIpv4 =
+    ip?.split(".").length === 4 &&
+    ip.split(".").every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
+  let isIpv6 = false;
+  if (ip?.includes(":") && /^[0-9a-fA-F:.]+$/.test(ip)) {
+    try {
+      isIpv6 = new URL(`http://[${ip}]/`).hostname.startsWith("[");
+    } catch {
+      isIpv6 = false;
+    }
+  }
+  if (!ip || ip.length > 45 || ip.includes(",") || (!isIpv4 && !isIpv6)) {
+    throw new Error("A origem da solicitação não pôde ser validada.");
+  }
+  return ip;
+}
+
 export type QuoteProductRecord = {
   slug: string;
   category: string;

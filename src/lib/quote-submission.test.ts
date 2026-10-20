@@ -6,6 +6,7 @@ import {
   quoteRequestSnapshotMatches,
   quoteRequestStatusSchema,
   quoteSubmissionInputSchema,
+  validateQuoteClientIp,
   verifyQuoteTurnstileToken,
   type QuoteProductRecord,
 } from './quote-submission';
@@ -55,6 +56,34 @@ function submission(items: Array<{ slug: string; variation?: string; quantity: s
 }
 
 describe('quote submission validation and snapshots', () => {
+  it('accepts a valid CF-Connecting-IP on a standard Request without Worker metadata', () => {
+    const request = new Request('https://majesta.example/quote', {
+      headers: { 'CF-Connecting-IP': '203.0.113.9' },
+    });
+
+    expect((request as Request & { cf?: unknown }).cf).toBeUndefined();
+    expect(validateQuoteClientIp(request.headers.get('cf-connecting-ip'))).toBe('203.0.113.9');
+    expect(validateQuoteClientIp('2001:db8::1')).toBe('2001:db8::1');
+  });
+
+  it.each([
+    ['missing header', null],
+    ['empty header', '   '],
+    ['malformed IPv4', '203.0.113.999'],
+    ['malformed IPv6', '2001:db8:::1'],
+    ['multiple addresses', '203.0.113.9, 198.51.100.7'],
+  ])('rejects %s as a client IP', (_case, ip) => {
+    expect(() => validateQuoteClientIp(ip)).toThrow();
+  });
+
+  it('does not use X-Forwarded-For when CF-Connecting-IP is absent', () => {
+    const request = new Request('https://majesta.example/quote', {
+      headers: { 'X-Forwarded-For': '203.0.113.9' },
+    });
+
+    expect(() => validateQuoteClientIp(request.headers.get('cf-connecting-ip'))).toThrow();
+  });
+
   it('snapshots canonical product data and keeps different models as separate lines', () => {
     const result = buildQuoteRequestSnapshot(
       submission([
@@ -269,5 +298,21 @@ describe('Cloudflare Turnstile and rate-limit key protections', () => {
     expect(same).toBe(first);
     expect(different).not.toBe(first);
     await expect(hashQuoteClientIp('203.0.113.9', 'short')).rejects.toThrow();
+  });
+
+  it('keeps the validated edge IP as the stable HMAC identity for rate limiting', async () => {
+    const request = new Request('https://majesta.example/quote', {
+      headers: { 'CF-Connecting-IP': '203.0.113.9' },
+    });
+    const clientIp = validateQuoteClientIp(request.headers.get('cf-connecting-ip'));
+    const requestKey = await hashQuoteClientIp(
+      clientIp,
+      '0123456789abcdef0123456789abcdef',
+    );
+
+    expect(requestKey).toMatch(/^[0-9a-f]{64}$/);
+    expect(requestKey).toBe(
+      await hashQuoteClientIp('203.0.113.9', '0123456789abcdef0123456789abcdef'),
+    );
   });
 });

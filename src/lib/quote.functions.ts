@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest } from "@tanstack/react-start/server";
+import { getRequest, getRequestHeader } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -12,6 +12,7 @@ import {
   quoteSubmissionInputSchema,
   quoteRequestSnapshotMatches,
   verifyQuoteTurnstileToken,
+  validateQuoteClientIp,
   quoteRequestStatusSchema,
   type QuoteRequestSnapshot,
 } from "@/lib/quote-submission";
@@ -38,28 +39,8 @@ function createQuoteServiceClient() {
   });
 }
 
-function readTrustedCloudflareIp(request: Request): string {
-  const cloudflareRequest = request as Request & { cf?: unknown };
-  if (!cloudflareRequest.cf || typeof cloudflareRequest.cf !== "object") {
-    throw new Error(unavailableMessage);
-  }
-
-  const ip = request.headers.get("cf-connecting-ip")?.trim();
-  const isIpv4 =
-    ip?.split(".").length === 4 &&
-    ip.split(".").every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
-  let isIpv6 = false;
-  if (ip?.includes(":") && /^[0-9a-fA-F:.]+$/.test(ip)) {
-    try {
-      isIpv6 = new URL(`http://[${ip}]/`).hostname.startsWith("[");
-    } catch {
-      isIpv6 = false;
-    }
-  }
-  if (!ip || ip.length > 45 || ip.includes(",") || (!isIpv4 && !isIpv6)) {
-    throw new Error(unavailableMessage);
-  }
-  return ip;
+function readTrustedCloudflareIp(): string {
+  return validateQuoteClientIp(getRequestHeader("cf-connecting-ip"));
 }
 
 async function loadQuoteSnapshot(
@@ -116,7 +97,7 @@ export const registerQuoteRequest = createServerFn({ method: "POST" })
 
       const request = getRequest();
       if (!request) return { ok: false, reason: "unavailable" } as const;
-      const clientIp = readTrustedCloudflareIp(request);
+      const clientIp = readTrustedCloudflareIp();
       const db = createQuoteServiceClient();
 
       const existing = await db
