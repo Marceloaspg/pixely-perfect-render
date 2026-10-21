@@ -1,6 +1,6 @@
-import { Link } from "@tanstack/react-router";
-import { useState } from "react";
-import { Menu, X, ClipboardList, Mail, Phone, MessageCircle, Instagram, Facebook } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useState, type FormEvent } from "react";
+import { Menu, X, ClipboardList, Mail, Phone, MessageCircle, Instagram, Facebook, Search, Check } from "lucide-react";
 import logo from "@/assets/majesta-logo.png";
 import { type Product } from "@/data/catalog";
 import { whatsappLink } from "@/lib/config";
@@ -25,36 +25,157 @@ function formatPhoneNumber(number: string): string {
   return number;
 }
 
+function WhatsAppIcon({ className }: { className: string }) {
+  return (
+    <span className={`relative inline-flex ${className}`} aria-hidden="true">
+      <MessageCircle className="h-full w-full" strokeWidth={2} />
+      <Phone className="absolute left-[30%] top-[30%] h-[40%] w-[40%] -rotate-12" strokeWidth={3} />
+    </span>
+  );
+}
+
 export function Header() {
   const [open, setOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const { config } = useCatalog();
   const { items } = useQuote();
+  const navigate = useNavigate();
 
   function closeNavigation() {
     setOpen(false);
   }
 
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = searchTerm.trim();
+    void navigate({
+      to: "/produtos",
+      search: (previous) => {
+        const next = { ...previous };
+        if (query) next.q = query;
+        else delete next.q;
+        return next;
+      },
+    });
+  }
+
+  function searchForm(className: string) {
+    return (
+      <form
+        role="search"
+        action="/produtos"
+        method="get"
+        onSubmit={submitSearch}
+        className={`flex min-w-0 items-center rounded-full border border-border bg-secondary px-3 ${className}`}
+      >
+        <input
+          aria-label="Pesquisar produtos"
+          name="q"
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+          placeholder="Pesquisar produtos..."
+          className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+        />
+        <button
+          type="submit"
+          aria-label="Pesquisar produtos"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-navy hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Search aria-hidden="true" className="h-4 w-4" />
+        </button>
+      </form>
+    );
+  }
+
+  const whatsappHref = whatsappLink("Olá! Gostaria de solicitar um orçamento com a Majesta Embalagens.", config.whatsapp);
+
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur">
-      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-4 px-5">
-        <Link to="/" className="flex min-w-0 items-center gap-3">
-          <img src={logo} alt="Majesta Embalagens" width={48} height={48} className="h-12 w-12 shrink-0 rounded-full object-cover" />
-          <span className="hidden truncate text-sm font-extrabold tracking-[0.18em] text-navy sm:block">MAJESTA<span className="block text-[10px] font-semibold tracking-[0.35em] text-gold">EMBALAGENS</span></span>
-        </Link>
-        <nav className="hidden items-center gap-3 lg:flex xl:gap-7">
+      <div className="bg-navy text-primary-foreground">
+        <div className="mx-auto flex h-10 max-w-7xl items-center justify-between gap-2 px-3 sm:px-5">
+          <p className="min-w-0 flex-1 whitespace-nowrap text-center text-[11px] font-semibold sm:text-sm">
+            5% OFF pagamento via PIX
+          </p>
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            {config.instagram && (
+              <a
+                href={config.instagram}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Instagram da Majesta Embalagens"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-primary-foreground/10"
+              >
+                <Instagram aria-hidden="true" className="h-4 w-4" />
+              </a>
+            )}
+            {config.facebook && (
+              <a
+                href={config.facebook}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Facebook da Majesta Embalagens"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-primary-foreground/10"
+              >
+                <Facebook aria-hidden="true" className="h-4 w-4" />
+              </a>
+            )}
+            {whatsappHref && (
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="WhatsApp da Majesta Embalagens"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-primary-foreground/10"
+              >
+                <WhatsAppIcon className="h-4 w-4" />
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-3 gap-y-0 px-3 py-1 lg:h-20 lg:flex-nowrap lg:gap-4 lg:px-5 lg:py-0">
+        <div className="grid h-14 w-full grid-cols-[3rem_minmax(0,1fr)_3rem] items-center gap-2 lg:flex lg:h-full lg:w-auto lg:shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Menu"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+            className="h-12 w-12 rounded-full p-0 focus-visible:ring-2 lg:hidden"
+          >
+            {open ? <X className="!size-5" /> : <Menu className="!size-5" />}
+          </Button>
+          <Link
+            to="/"
+            aria-label="MAJESTA EMBALAGENS — página inicial"
+            className="flex min-w-0 items-center justify-self-center gap-1.5 lg:justify-self-auto lg:gap-2 sm:gap-3"
+          >
+            <img src={logo} alt="Majesta Embalagens" width={48} height={48} className="h-10 w-10 shrink-0 rounded-full object-cover lg:h-12 lg:w-12" />
+            <span className="hidden truncate text-[10px] font-extrabold tracking-[0.12em] text-navy min-[360px]:block lg:text-sm lg:tracking-[0.18em]">MAJESTA<span className="block text-[8px] font-semibold tracking-[0.24em] text-gold lg:text-[10px] lg:tracking-[0.35em]">EMBALAGENS</span></span>
+          </Link>
+          <div className="flex shrink-0 items-center justify-self-end gap-1 lg:hidden">
+            <Link to="/orcamento" aria-label={`Solicitar orçamento${items.length ? `, ${items.length} ${items.length === 1 ? "produto" : "produtos"}` : ""}`} className="relative inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              <ClipboardList aria-hidden="true" className="h-4 w-4" />
+              {items.length > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-gold px-1.5 text-[10px] font-bold text-navy">{items.length}</span>}
+            </Link>
+          </div>
+        </div>
+        {searchForm("hidden lg:mx-2 lg:flex lg:w-auto lg:max-w-xs lg:flex-1")}
+        <nav className="hidden items-center gap-3 lg:flex xl:gap-5">
           {nav.map((n) => (
             <Link key={n.to} to={n.to} activeOptions={{ exact: n.to === "/" }} className="whitespace-nowrap text-sm font-medium text-foreground/80 transition-colors hover:text-navy data-[status=active]:text-navy data-[status=active]:font-bold">
               {n.label}
             </Link>
           ))}
         </nav>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="hidden shrink-0 items-center gap-2 lg:flex">
           <Link to="/orcamento" className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-navy-soft">
-            <ClipboardList className="h-4 w-4" />
+            <ClipboardList aria-hidden="true" className="h-4 w-4" />
             <span className="hidden sm:inline">Solicitar orçamento</span>
             {items.length > 0 && <span className="rounded-full bg-gold px-2 text-xs font-bold text-navy">{items.length}</span>}
           </Link>
-          <Button variant="ghost" size="icon" aria-label="Menu" onClick={() => setOpen(!open)} className="rounded-md p-2 lg:hidden">{open ? <X /> : <Menu />}</Button>
         </div>
+        {searchForm("w-full self-center lg:hidden")}
       </div>
       {open && (
         <nav className="border-t border-border bg-background px-5 py-3 lg:hidden">
@@ -149,6 +270,14 @@ export function PageHero({ eyebrow, title, text }: { eyebrow: string; title: str
 }
 
 export function ProductCard({ p }: { p: Product }) {
+  const { add, has } = useQuote();
+  const variations = [...new Set(p.variations.map((variation) => variation.trim()).filter(Boolean))];
+  const alreadyAdded = has(p.slug, variations[0]);
+
+  function addToQuote() {
+    if (!alreadyAdded) add(p, variations[0]);
+  }
+
   return (
     <article className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-card transition hover:-translate-y-1">
       <Link to="/produtos/$slug" params={{ slug: p.slug }} className="relative block aspect-[5/4] overflow-hidden bg-muted">
@@ -158,11 +287,25 @@ export function ProductCard({ p }: { p: Product }) {
       <div className="flex flex-1 flex-col p-5">
         <Link to="/produtos/$slug" params={{ slug: p.slug }} className="line-clamp-2 min-h-12 font-bold leading-6 text-navy hover:underline">{p.name}</Link>
         <p className="mt-1 h-[4.5rem] overflow-hidden text-ellipsis text-sm leading-6 text-muted-foreground line-clamp-3">{p.description}</p>
-        <Button asChild variant="quote" className="mt-auto h-11 w-full rounded-full px-4 text-sm font-semibold">
-          <Link to="/produtos/$slug" params={{ slug: p.slug }}>
-            Solicitar cotação
-          </Link>
-        </Button>
+        {variations.length <= 1 ? (
+          <Button
+            type="button"
+            variant="quote"
+            disabled={alreadyAdded}
+            aria-pressed={alreadyAdded}
+            onClick={addToQuote}
+            aria-label={`${alreadyAdded ? "Adicionado ao orçamento" : "Solicitar cotação"} de ${p.name}`}
+            className={`mt-auto h-11 w-full rounded-full px-4 text-sm font-semibold ${alreadyAdded ? "border-gold bg-gold text-navy hover:bg-gold disabled:border-gold disabled:bg-gold disabled:text-navy disabled:opacity-100" : ""}`}
+          >
+            {alreadyAdded ? <><Check aria-hidden="true" className="h-4 w-4" />Adicionado ao orçamento</> : "Solicitar cotação"}
+          </Button>
+        ) : (
+          <Button asChild variant="quote" className="mt-auto h-11 w-full rounded-full px-4 text-sm font-semibold">
+            <Link to="/produtos/$slug" params={{ slug: p.slug }}>
+              Selecionar modelo
+            </Link>
+          </Button>
+        )}
       </div>
     </article>
   );

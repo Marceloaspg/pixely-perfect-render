@@ -242,17 +242,17 @@ export function FeaturedProductsCarousel() {
                     <Link
                       to="/produtos/$slug"
                       params={{ slug: product.slug }}
-                      className="flex h-full flex-col items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold"
+                      className="flex h-full flex-col items-stretch focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold"
                       aria-label={`Veja mais sobre ${product.name}`}
                     >
-                      <div className="flex h-[280px] w-full max-w-[280px] shrink-0 items-center justify-center overflow-hidden bg-white">
+                      <div className="aspect-[5/4] w-full shrink-0 overflow-hidden bg-muted">
                         <img
                           src={product.image}
                           alt={product.name}
                           width={600}
                           height={600}
                           loading="lazy"
-                          className="block h-full min-h-0 min-w-0 w-full object-contain"
+                          className="block h-full w-full object-cover"
                         />
                       </div>
                       <div className="flex min-h-[118px] w-full flex-1 flex-col items-start p-5">
