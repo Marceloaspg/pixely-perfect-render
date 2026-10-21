@@ -5,9 +5,15 @@ import { Footer, Header, ProductCard } from './Layout';
 
 const layoutMocks = vi.hoisted(() => ({
   catalog: null as unknown as CatalogData,
-  items: [] as unknown[],
-  add: vi.fn(),
-  has: vi.fn(() => false),
+  items: [] as Array<{ slug: string; variation?: string }>,
+  add: vi.fn<(product: Product, variation?: string) => void>(),
+  has: vi.fn<(slug: string, variation?: string) => boolean>(),
+  navigate: vi.fn<
+    (options: {
+      to: string;
+      search: (previous: { categoria?: string; q?: string }) => { categoria?: string; q?: string };
+    }) => void
+  >(),
 }));
 
 vi.mock('@/lib/catalog-context', () => ({
@@ -19,6 +25,7 @@ vi.mock('@/lib/quote', () => ({
 }));
 
 vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => layoutMocks.navigate,
   Link: ({
     to,
     params,
@@ -70,8 +77,15 @@ function setup() {
     },
   };
   layoutMocks.items = [{ slug: 'caixa' }];
-  layoutMocks.add.mockClear();
-  layoutMocks.has.mockReset().mockReturnValue(false);
+  layoutMocks.add.mockReset().mockImplementation((product, variation) => {
+    if (!layoutMocks.items.some(item => item.slug === product.slug && item.variation === variation)) {
+      layoutMocks.items.push({ slug: product.slug, ...(variation ? { variation } : {}) });
+    }
+  });
+  layoutMocks.has.mockReset().mockImplementation((slug, variation) =>
+    layoutMocks.items.some(item => item.slug === slug && item.variation === variation),
+  );
+  layoutMocks.navigate.mockClear();
 }
 
 function product(slug: string, description: string, variations: string[] = []): Product {
@@ -112,7 +126,7 @@ describe('site header and footer', () => {
 
   it('uses a direct categories link in the mobile navigation without a submenu', () => {
     render(<Header />);
-    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Menu' })[0]!);
     const mobileNavigation = screen.getAllByRole('navigation')[1]!;
     const catalogLink = within(mobileNavigation).getByRole('link', { name: 'Catálogo' });
     expect(catalogLink).toHaveAttribute('href', '/categorias');
@@ -120,6 +134,81 @@ describe('site header and footer', () => {
     expect(within(mobileNavigation).queryByRole('button', { name: 'Catálogo' })).not.toBeInTheDocument();
     fireEvent.click(catalogLink);
     expect(screen.getAllByRole('navigation')).toHaveLength(1);
+  });
+
+  it('renders the compact promo bar with configured and safely opened business links', () => {
+    layoutMocks.catalog.config.instagram = 'https://instagram.com/majesta-oficial';
+    layoutMocks.catalog.config.facebook = 'https://facebook.com/majesta-oficial';
+    render(<Header />);
+
+    expect(screen.getByText('5% OFF pagamento via PIX')).toHaveClass('whitespace-nowrap');
+    const instagram = screen.getByRole('link', { name: 'Instagram da Majesta Embalagens' });
+    expect(instagram).toHaveAttribute('href', 'https://instagram.com/majesta-oficial');
+    expect(instagram).toHaveAttribute('target', '_blank');
+    expect(instagram).toHaveAttribute('rel', 'noopener noreferrer');
+    const facebook = screen.getByRole('link', { name: 'Facebook da Majesta Embalagens' });
+    expect(facebook).toHaveAttribute('href', 'https://facebook.com/majesta-oficial');
+    const whatsapp = screen.getByRole('link', { name: 'WhatsApp da Majesta Embalagens' });
+    expect(whatsapp).toHaveAttribute('href', expect.stringContaining('https://wa.me/5519996145193'));
+    expect(whatsapp).toHaveAttribute('target', '_blank');
+    expect(whatsapp).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(new URL(whatsapp.getAttribute('href')!).searchParams.get('text')).toBe(
+      'Olá! Gostaria de solicitar um orçamento com a Majesta Embalagens.',
+    );
+    expect(whatsapp.querySelectorAll('svg')).toHaveLength(2);
+  });
+
+  it('keeps the larger mobile menu first and the quote control without a second WhatsApp action', () => {
+    render(<Header />);
+    const menu = screen.getByRole('button', { name: 'Menu' });
+    const mobileRow = menu.parentElement;
+    expect(menu).toHaveClass('h-12', 'w-12');
+    expect(mobileRow?.firstElementChild).toBe(menu);
+    expect(mobileRow?.children[1]).toHaveAttribute('aria-label', 'MAJESTA EMBALAGENS — página inicial');
+    const actionGroup = mobileRow?.children[2];
+    if (!(actionGroup instanceof HTMLElement)) throw new Error('Mobile header actions are missing.');
+    expect(within(actionGroup).getAllByRole('link')).toHaveLength(1);
+    expect(within(actionGroup).getByRole('link', { name: 'Solicitar orçamento, 1 produto' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Falar com a Majesta pelo WhatsApp' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'WhatsApp da Majesta Embalagens' })).toBeInTheDocument();
+  });
+
+  it('hides social promo links when their business URLs are not configured', () => {
+    render(<Header />);
+    expect(screen.queryByRole('link', { name: 'Instagram da Majesta Embalagens' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Facebook da Majesta Embalagens' })).not.toBeInTheDocument();
+  });
+
+  it('shows a centered compact homepage link and responsive full-width mobile search', () => {
+    const { container } = render(<Header />);
+    const brand = screen.getByRole('link', { name: 'MAJESTA EMBALAGENS — página inicial' });
+    expect(brand).toHaveAttribute('href', '/');
+    expect(brand).toHaveClass('justify-self-center', 'lg:justify-self-auto');
+    expect(screen.getAllByRole('search')).toHaveLength(2);
+    expect(screen.getAllByPlaceholderText('Pesquisar produtos...')).toHaveLength(2);
+    expect(screen.getAllByRole('search')[0]).toHaveAttribute('action', '/produtos');
+    expect(screen.getAllByRole('search')[0]).toHaveAttribute('method', 'get');
+    expect(screen.getAllByRole('search')[0]?.querySelector('input')).toHaveAttribute('name', 'q');
+    expect(container.querySelector('.h-14')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Solicitar orçamento, 1 produto' })).toBeInTheDocument();
+  });
+
+  it('submits a header search to the product catalog with the trimmed query', () => {
+    render(<Header />);
+    const [mobileSearch] = screen.getAllByRole('search');
+    fireEvent.change(within(mobileSearch!).getByRole('textbox', { name: 'Pesquisar produtos' }), {
+      target: { value: '  CX-001  ' },
+    });
+    fireEvent.submit(mobileSearch!);
+
+    expect(layoutMocks.navigate).toHaveBeenCalledWith({
+      to: '/produtos',
+      search: expect.any(Function),
+    });
+    expect(layoutMocks.navigate.mock.calls[0]![0].search({ categoria: 'caixas' })).toEqual({
+      categoria: 'caixas',
+      q: 'CX-001',
+    });
   });
 
   it('shows configured contact details and useful links without categories or missing business data', () => {
@@ -189,12 +278,12 @@ describe('site header and footer', () => {
     expect(facebook.querySelector('svg')).toHaveClass('text-gold');
   });
 
-  it('uses one details link button for products with or without variations without adding them to the quote', () => {
+  it('adds products directly when there is no ambiguous variation and keeps details links clickable', () => {
     const products = [
       product('sem-variacoes', 'Descrição curta.'),
-      product('com-variacoes', 'Descrição maior para o produto com vários modelos disponíveis.', ['Pequeno', 'Grande']),
+      product('com-variacoes-unicas', 'Produto com um modelo definido.', ['Grande']),
     ];
-    const { container } = render(
+    const { container, rerender } = render(
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {products.map(item => <ProductCard key={item.slug} p={item} />)}
       </div>,
@@ -203,27 +292,55 @@ describe('site header and footer', () => {
     const cards = container.querySelectorAll('article');
     expect(cards).toHaveLength(2);
     for (const card of cards) {
-      const button = within(card).getByRole('link', { name: 'Solicitar cotação' });
-      expect(button).toHaveAttribute('href', expect.stringMatching(/^\/produtos\/(sem-variacoes|com-variacoes)$/));
+      const button = within(card).getByRole('button', { name: /Solicitar cotação de Produto/ });
       expect(button).toHaveClass('h-11', 'w-full', 'rounded-full');
-      expect(within(card).queryByText('Selecionar tamanho/modelo')).not.toBeInTheDocument();
-      expect(within(card).getByText(/Descrição/)).toHaveClass('line-clamp-3', 'h-[4.5rem]', 'overflow-hidden');
+      expect(card.querySelector('p')).toHaveClass('line-clamp-3', 'h-[4.5rem]', 'overflow-hidden');
     }
-    expect(within(cards[0]!).getByRole('link', { name: 'Solicitar cotação' })).toHaveAttribute(
-      'href',
-      '/produtos/sem-variacoes',
+    const firstButton = within(cards[0]!).getByRole('button', { name: 'Solicitar cotação de Produto sem-variacoes' });
+    fireEvent.click(firstButton);
+    fireEvent.click(within(cards[1]!).getByRole('button', { name: 'Solicitar cotação de Produto com-variacoes-unicas' }));
+    expect(layoutMocks.add).toHaveBeenNthCalledWith(1, products[0], undefined);
+    expect(layoutMocks.add).toHaveBeenNthCalledWith(2, products[1], 'Grande');
+    rerender(
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {products.map(item => <ProductCard key={item.slug} p={item} />)}
+      </div>,
     );
-    expect(within(cards[1]!).getByRole('link', { name: 'Solicitar cotação' })).toHaveAttribute(
-      'href',
-      '/produtos/com-variacoes',
-    );
-    expect(layoutMocks.add).not.toHaveBeenCalled();
-    expect(layoutMocks.items).toEqual([{ slug: 'caixa' }]);
+    const addedButton = within(container).getByRole('button', { name: 'Adicionado ao orçamento de Produto sem-variacoes' });
+    expect(addedButton).toBeDisabled();
+    expect(addedButton).toHaveClass('bg-gold');
+    expect(within(container).queryByRole('status')).not.toBeInTheDocument();
+    fireEvent.click(addedButton);
+    expect(layoutMocks.add).toHaveBeenCalledTimes(2);
     expect(cards[0]?.querySelector('img')?.parentElement).toHaveClass('aspect-[5/4]');
-    expect(cards[0]?.querySelector('div > a:last-child')).toHaveClass('mt-auto');
+    expect(within(cards[0]!).getAllByRole('link', { name: 'Produto sem-variacoes' }).every(
+      (link) => link.getAttribute('href') === '/produtos/sem-variacoes',
+    )).toBe(true);
     expect(container.querySelector('.grid')).toHaveClass('sm:grid-cols-2', 'lg:grid-cols-4');
   });
 
+  it('requires a model choice for multiple variations and avoids duplicate quote lines', () => {
+    const ambiguousProduct = product('variacoes', 'Produto com diversos modelos.', ['Pequeno', 'Grande']);
+    const { container } = render(<ProductCard p={ambiguousProduct} />);
+    expect(screen.getByRole('link', { name: 'Selecionar modelo' })).toHaveAttribute(
+      'href',
+      '/produtos/variacoes',
+    );
+    expect(layoutMocks.add).not.toHaveBeenCalled();
+    expect(screen.getAllByRole('link', { name: 'Produto variacoes' }).every(
+      (link) => link.getAttribute('href') === '/produtos/variacoes',
+    )).toBe(true);
+
+    cleanup();
+    layoutMocks.add.mockClear();
+    layoutMocks.items.push({ slug: 'existente', variation: 'Grande' });
+    render(<ProductCard p={product('existente', 'Produto já selecionado.', ['Grande'])} />);
+    const addedButton = screen.getByRole('button', { name: 'Adicionado ao orçamento de Produto existente' });
+    expect(addedButton).toBeDisabled();
+    expect(layoutMocks.add).not.toHaveBeenCalled();
+    expect(screen.queryByText('Já está no orçamento')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
   it('reserves the same three-line description space when the description is absent', () => {
     const { container } = render(<ProductCard p={product('vazio', '')} />);
     const description = container.querySelector('article > div > p');

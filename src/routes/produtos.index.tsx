@@ -1,12 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { applications } from "@/data/catalog";
+import { applications, matchesCatalogProductSearch } from "@/data/catalog";
 import { useCatalog } from "@/lib/catalog-context";
 import { PageHero, ProductCard } from "@/components/site/Layout";
 
 export const Route = createFileRoute("/produtos/")({
-  validateSearch: (s: Record<string, unknown>): { categoria?: string } => typeof s['categoria'] === "string" ? { categoria: s['categoria'] } : {},
+  validateSearch: (s: Record<string, unknown>): { categoria?: string; q?: string } => ({
+    ...(typeof s['categoria'] === "string" ? { categoria: s['categoria'] } : {}),
+    ...(typeof s['q'] === "string" ? { q: s['q'].trim() } : {}),
+  }),
   head: () => ({
     meta: [{ property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" },
       { title: "Produtos — Catálogo de embalagens | Majesta Embalagens" },
@@ -20,14 +23,14 @@ export const Route = createFileRoute("/produtos/")({
 
 function Catalog() {
   const { categories, products } = useCatalog();
-  const { categoria } = Route.useSearch();
-  const [q, setQ] = useState("");
+  const { categoria, q: searchQuery } = Route.useSearch();
+  const [q, setQ] = useState(searchQuery ?? "");
   const [cat, setCat] = useState(categoria ?? "");
   const [app, setApp] = useState("");
+  useEffect(() => setQ(searchQuery ?? ""), [searchQuery]);
   const list = useMemo(() => {
-    const t = q.trim().toLowerCase();
     return products
-      .filter((p) => (!cat || p.category === cat) && (!app || p.applications.includes(app)) && (!t || `${p.name} ${p.description}`.toLowerCase().includes(t)))
+      .filter((p) => (!cat || p.category === cat) && (!app || p.applications.includes(app)) && matchesCatalogProductSearch(p, q))
       .sort((a, b) => Number(!!b.featured) - Number(!!a.featured) || a.order - b.order);
   }, [q, cat, app, products]);
 

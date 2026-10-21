@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { allowedCategories, assertAdminRole, categoryDataSchema, categorySlugSchema, filterPublicCatalog, selectCatalogAudience, segments, productDataSchema, slugify, sortCategories } from './catalog';
+import { allowedCategories, assertAdminRole, categoryDataSchema, categorySlugSchema, filterPublicCatalog, matchesCatalogProductSearch, selectCatalogAudience, segments, productDataSchema, slugify, sortCategories } from './catalog';
 import { AdminPermissionDeniedError, AdminRoleCheckError } from '@/lib/admin-access';
 
 it('exposes exactly the seven requested categories',()=>{expect([...allowedCategories]).toEqual(['embalagens-para-hamburguer','sacos-kraft-e-sacolas','papeis-para-alimentos','embalagens-para-batatas-e-porcoes','embalagens-para-hot-dog','embalagens-para-combos','etiquetas-e-lacres-de-seguranca']);});
@@ -42,6 +42,34 @@ it('validates and accepts structured SKU, dimensions, and packaging', () => {
   expect(parsed.dimensions.length).toBe('24');
   expect(parsed.packageQuantity).toBe(500);
   expect(parsed.packageType).toBe('fardo');
+});
+
+it('searches products by name, SKU, model, material, dimensions and existing catalog fields', () => {
+  const product = {
+    ...productDataSchema.parse({
+      name: 'Caixa para delivery',
+      description: 'Embalagem resistente.',
+      sku: 'CX-001',
+      material: 'Papel kraft',
+      dimensions: { length: '20', width: '15', height: '10', unit: 'cm' },
+      packageType: 'caixa',
+      packUnit: '100 unidades',
+      specs: ['Impressão personalizada'],
+      variations: ['Grande'],
+      applications: ['Delivery'],
+    }),
+    slug: 'caixa-delivery',
+    category: 'embalagens',
+    image: '',
+    additionalImages: [],
+    active: true,
+  };
+
+  for (const query of ['CAIXA', 'cx-001', 'grande', 'kraft', '20', 'impressão', 'delivery', '100 unidades']) {
+    expect(matchesCatalogProductSearch(product, query)).toBe(true);
+  }
+  expect(matchesCatalogProductSearch(product, 'produto inexistente')).toBe(false);
+  expect(matchesCatalogProductSearch(product, '   ')).toBe(true);
 });
 
 it('keeps the original categories while accepting new valid category slugs', () => {

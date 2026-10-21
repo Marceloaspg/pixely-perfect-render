@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Layers, Headphones, ClipboardCheck, Store } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowRight, Layers, Headphones, ClipboardCheck, Store, Truck, CreditCard, BadgePercent } from "lucide-react";
 import { filterPublicCatalog } from "@/data/catalog";
 import { useCatalog } from "@/lib/catalog-context";
 import { whatsappLink } from "@/lib/config";
@@ -54,12 +55,111 @@ const perks = [
   },
 ];
 
+const commercialBenefits = [
+  { icon: Truck, title: "FRETE GRÁTIS", text: "Compras acima de R$200 consulte condições" },
+  { icon: CreditCard, title: "PARCELE EM 3X", text: "Sem juros" },
+  { icon: BadgePercent, title: "PAGUE VIA PIX", text: "5% de desconto!" },
+];
+
+function CommercialBenefits() {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const motionPreference = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    const updatePreferences = () => {
+      setIsMobile(window.innerWidth < 768);
+      setReducedMotion(motionPreference?.matches ?? false);
+    };
+    updatePreferences();
+    window.addEventListener("resize", updatePreferences);
+    motionPreference?.addEventListener("change", updatePreferences);
+    return () => {
+      window.removeEventListener("resize", updatePreferences);
+      motionPreference?.removeEventListener("change", updatePreferences);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile || reducedMotion) return;
+    const interval = window.setInterval(() => {
+      const track = trackRef.current;
+      if (!track?.clientWidth) return;
+      setActiveIndex((current) => {
+        const next = (current + 1) % commercialBenefits.length;
+        track.scrollTo({ left: next * track.clientWidth, behavior: "smooth" });
+        return next;
+      });
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [isMobile, reducedMotion]);
+
+  function selectBenefit(index: number) {
+    const track = trackRef.current;
+    if (track) track.scrollTo({ left: index * track.clientWidth, behavior: "smooth" });
+    setActiveIndex(index);
+  }
+
+  function updateActiveBenefit() {
+    const track = trackRef.current;
+    if (track?.clientWidth) {
+      setActiveIndex(Math.min(commercialBenefits.length - 1, Math.round(track.scrollLeft / track.clientWidth)));
+    }
+  }
+
+  return (
+    <section
+      aria-label="Benefícios e condições comerciais"
+      className="border-y border-border/70 bg-white py-6 md:py-8"
+    >
+      <div className="mx-auto max-w-7xl px-5">
+        <div
+          ref={trackRef}
+          onScroll={updateActiveBenefit}
+          className="flex snap-x snap-mandatory overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-3 md:gap-4 md:overflow-visible"
+        >
+          {commercialBenefits.map((benefit, index) => (
+            <article
+              key={benefit.title}
+              aria-roledescription="slide"
+              aria-label={`${index + 1} de ${commercialBenefits.length}`}
+              className="flex min-h-28 w-full shrink-0 snap-center items-center justify-center gap-4 rounded-2xl border border-border bg-card px-5 py-5 shadow-card md:min-w-0 md:justify-start md:px-6"
+            >
+              <benefit.icon aria-hidden="true" className="h-10 w-10 shrink-0 text-gold" />
+              <div>
+                <h2 className="text-sm font-extrabold tracking-wide text-navy">{benefit.title}</h2>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{benefit.text}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="mt-4 flex justify-center gap-2 md:hidden" aria-label="Paginação dos benefícios">
+          {commercialBenefits.map((benefit, index) => (
+            <button
+              key={benefit.title}
+              type="button"
+              aria-label={`Mostrar benefício: ${benefit.title}`}
+              aria-pressed={activeIndex === index}
+              onClick={() => selectBenefit(index)}
+              className={`h-2.5 rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeIndex === index ? "w-6 bg-navy" : "w-2.5 bg-border"}`}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Index() {
   const { categories, config } = useCatalog();
   const publicCategories = filterPublicCatalog(categories, []).categories;
   return (
     <>
       <HomepageHeroCarousel />
+
+      <CommercialBenefits />
 
       <FeaturedProductsCarousel />
       <HomepageCarousel />

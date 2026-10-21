@@ -47,6 +47,25 @@ export const productDataSchema = z.object({
 });
 export type Category = z.infer<typeof categoryDataSchema> & {slug:string;image:string;active:boolean};
 export type Product = z.infer<typeof productDataSchema> & {slug:string;category:string;image:string;imageAvailable?:boolean;additionalImages:string[];active:boolean};
+export function matchesCatalogProductSearch(product: Product, search: string): boolean {
+  const query = search.trim().toLocaleLowerCase('pt-BR');
+  if (!query) return true;
+  const searchableText = [
+    product.name,
+    product.description,
+    product.sku,
+    product.material,
+    product.dimensions.length,
+    product.dimensions.width,
+    product.dimensions.height,
+    product.packageType,
+    product.packUnit,
+    ...product.specs,
+    ...product.variations,
+    ...product.applications,
+  ].join(' ').toLocaleLowerCase('pt-BR');
+  return searchableText.includes(query);
+}
 export const contactSchema = z.object({whatsapp:z.string().regex(/^\d{10,15}$/),email:z.union([z.string().email(),z.literal('')]),instagram:z.union([z.string().url(),z.literal('')]),facebook:z.union([z.string().url(),z.literal('')])});
 export type SiteConfig = z.infer<typeof contactSchema>;
 export type CatalogData = { categories:Category[];products:Product[];config:SiteConfig };
