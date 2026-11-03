@@ -22,12 +22,13 @@ export const Route = createFileRoute("/privacidade")({
         <h2 className="pt-4 text-xl font-bold text-navy">Responsável pelo tratamento</h2>
 
         <p>
-          Majesta Embalagens é o nome comercial de um empreendimento operado por pessoa física,
-          ainda sem CNPJ. Não há razão social ou CNPJ informado nesta política.
+          MAJESTA EMBALAGENS é o nome comercial de 69.795.523 THAYSA SILVA VARELA DE VASCONCELOS,
+          inscrita no CNPJ sob o nº 69.795.523/0001-78, com endereço comercial na Rua João Vieira,
+          nº 12, Chácara São João, Amparo/SP, CEP 13905-713, e atua como responsável pelo tratamento
+          dos dados pessoais descritos nesta política.
         </p>
         <p>
-          Responsável pessoa física: <strong>Marcelo Afonso da Silva</strong>. O canal oficial para
-          dúvidas e solicitações sobre privacidade é{" "}
+          O canal para dúvidas e solicitações sobre privacidade é{" "}
           <a href="mailto:marceloacessft@gmail.com" className="font-medium text-navy underline">
             marceloacessft@gmail.com
           </a>
