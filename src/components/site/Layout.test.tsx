@@ -222,7 +222,12 @@ describe('site header and footer', () => {
     expect(within(footer!).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', expect.stringContaining('https://wa.me/5519996145193'));
     expect(within(footer!).getByRole('link', { name: 'Produtos' })).toHaveAttribute('href', '/produtos');
     expect(within(footer!).queryByText('Caixas')).not.toBeInTheDocument();
-    expect(within(footer!).queryByText(/CNPJ|Razão social|Endereço/)).not.toBeInTheDocument();
+    expect(within(footer!).getByText("69.795.523 THAYSA SILVA VARELA DE VASCONCELOS")).toBeInTheDocument();
+    expect(within(footer!).getByText("CNPJ: 69.795.523/0001-78 · Amparo/SP")).toBeInTheDocument();
+    expect(within(footer!).getByText("Rua João Vieira, nº 12 · Chácara São João · Amparo/SP · CEP 13905-713")).toBeInTheDocument();
+    expect(within(footer!).getAllByRole("link", { name: "Política de Privacidade" })).toHaveLength(2);
+    expect(within(footer!).getAllByRole("link", { name: "Termos de Uso" })).toHaveLength(2);
+    expect(within(footer!).queryByText(/Endereço/)).not.toBeInTheDocument();
     expect(within(footer!).queryByRole('link', { name: /Instagram|Facebook|@/ })).not.toBeInTheDocument();
   });
 

@@ -247,9 +247,29 @@ export function Footer() {
             <li><Link to="/sobre" className="hover:text-gold">Sobre Nós</Link></li>
             <li><Link to="/contato" className="hover:text-gold">Contato</Link></li>
             <li><Link to="/privacidade" className="hover:text-gold">Política de Privacidade</Link></li>
+            <li><Link to="/termos" className="hover:text-gold">Termos de Uso</Link></li>
           </ul>
         </div>
       </div>
+      <section
+        aria-label="Identificação empresarial"
+        className="border-t border-primary-foreground/10 px-5 py-5 text-center text-xs leading-relaxed text-primary-foreground/65"
+      >
+        <p className="font-bold tracking-wide text-primary-foreground">MAJESTA EMBALAGENS</p>
+        <p className="mt-1">69.795.523 THAYSA SILVA VARELA DE VASCONCELOS</p>
+        <p>CNPJ: 69.795.523/0001-78 · Amparo/SP</p>
+        <address className="mx-auto mt-1 max-w-3xl not-italic">
+          Rua João Vieira, nº 12 · Chácara São João · Amparo/SP · CEP 13905-713
+        </address>
+        <div className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1">
+          <Link to="/privacidade" className="underline underline-offset-2 hover:text-gold">
+            Política de Privacidade
+          </Link>
+          <Link to="/termos" className="underline underline-offset-2 hover:text-gold">
+            Termos de Uso
+          </Link>
+        </div>
+      </section>
       <div className="border-t border-primary-foreground/10 py-5 text-center text-xs text-primary-foreground/60">
         © {new Date().getFullYear()} Majesta Embalagens. Todos os direitos reservados.
       </div>

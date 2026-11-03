@@ -56,9 +56,9 @@ const perks = [
 ];
 
 const commercialBenefits = [
-  { icon: Truck, title: "FRETE GRÁTIS", text: "Compras acima de R$200 consulte condições" },
-  { icon: CreditCard, title: "PARCELE EM 3X", text: "Sem juros" },
-  { icon: BadgePercent, title: "PAGUE VIA PIX", text: "5% de desconto!" },
+  { icon: Truck, title: "ENTREGAS GRÁTIS", text: "Consulte condições" },
+  { icon: CreditCard, title: "PARCELE EM ATÉ 3X", text: "Sem juros e sem valor mínimo. Confirme no atendimento." },
+  { icon: BadgePercent, title: "PAGUE VIA PIX", text: "5% de desconto em todos os produtos, sem valor mínimo." },
 ];
 
 function CommercialBenefits() {

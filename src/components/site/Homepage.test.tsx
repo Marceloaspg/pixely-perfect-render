@@ -101,12 +101,13 @@ describe("homepage presentation", () => {
     expect(cards[0]).toHaveAttribute("href", "/categorias/caixas");
     expect(within(container).queryByText("Categoria inativa")).not.toBeInTheDocument();
     const benefits = screen.getByRole("region", { name: "Benefícios e condições comerciais" });
-    expect(within(benefits).getByRole("heading", { name: "FRETE GRÁTIS" })).toBeInTheDocument();
-    expect(within(benefits).getByText("Compras acima de R$200 consulte condições")).toBeInTheDocument();
-    expect(within(benefits).getByRole("heading", { name: "PARCELE EM 3X" })).toBeInTheDocument();
-    expect(within(benefits).getByText("Sem juros")).toBeInTheDocument();
+    expect(within(benefits).getByRole("heading", { name: "ENTREGAS GRÁTIS" })).toBeInTheDocument();
+    expect(within(benefits).getByText("Consulte condições")).toBeInTheDocument();
+    expect(within(benefits).getByRole("heading", { name: "PARCELE EM ATÉ 3X" })).toBeInTheDocument();
+    expect(within(benefits).getByText("Sem juros e sem valor mínimo. Confirme no atendimento.")).toBeInTheDocument();
     expect(within(benefits).getByRole("heading", { name: "PAGUE VIA PIX" })).toBeInTheDocument();
-    expect(within(benefits).getByText("5% de desconto!")).toBeInTheDocument();
+    expect(within(benefits).getByText("5% de desconto em todos os produtos, sem valor mínimo.")).toBeInTheDocument();
+    expect(within(benefits).queryByText(/R\$ ?200/)).not.toBeInTheDocument();
     const benefitTrack = benefits.querySelector("[aria-roledescription='slide']")?.parentElement;
     expect(benefitTrack).toHaveClass(
       "snap-x",
@@ -119,7 +120,7 @@ describe("homepage presentation", () => {
     if (!benefitTrack) throw new Error("The benefits carousel track is not rendered.");
     Object.defineProperty(benefitTrack, "clientWidth", { configurable: true, value: 300 });
     benefitTrack.scrollTo = vi.fn();
-    fireEvent.click(within(benefits).getByRole("button", { name: "Mostrar benefício: PARCELE EM 3X" }));
+    fireEvent.click(within(benefits).getByRole("button", { name: "Mostrar benefício: PARCELE EM ATÉ 3X" }));
     expect(benefitTrack.scrollTo).toHaveBeenCalledWith({ left: 300, behavior: "smooth" });
     expect(screen.getByRole("heading", { name: "Variedade de soluções" }).parentElement).toHaveClass(
       "items-center",
