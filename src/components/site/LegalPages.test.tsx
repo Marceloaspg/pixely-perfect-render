@@ -45,9 +45,9 @@ describe("legal pages", () => {
     expect(
       screen.getByText(/revisará manualmente os registros de orçamento a cada três meses/),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "marceloacessft@gmail.com" })[0]).toHaveAttribute(
+    expect(screen.getAllByRole("link", { name: "contato@majestaembalagens.com.br" })[0]).toHaveAttribute(
       "href",
-      "mailto:marceloacessft@gmail.com",
+      "mailto:contato@majestaembalagens.com.br",
     );
   });
 

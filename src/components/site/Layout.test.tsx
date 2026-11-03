@@ -255,12 +255,12 @@ describe('site header and footer', () => {
   });
 
   it('renders the business email only when it is configured', () => {
-    layoutMocks.catalog.config.email = 'comercial@example.com';
+    layoutMocks.catalog.config.email = 'contato@majestaembalagens.com.br';
     const { container } = render(<Footer />);
     const footer = container.querySelector('footer')!;
-    expect(within(footer).getByRole('link', { name: 'comercial@example.com' })).toHaveAttribute(
+    expect(within(footer).getByRole('link', { name: 'contato@majestaembalagens.com.br' })).toHaveAttribute(
       'href',
-      'mailto:comercial@example.com',
+      'mailto:contato@majestaembalagens.com.br',
     );
   });
 
