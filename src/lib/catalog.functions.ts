@@ -9,6 +9,7 @@ import { verifyAdminRole, SupabaseServiceUnavailableError } from '@/lib/admin-ac
 import { applySignedCatalogImageUrls, signCatalogImagePaths } from '@/lib/catalog-image-signing';
 import { filterEligibleHomepageBanners, getEligibleFeaturedProductSlugs, homepageBannerSchema, type HomepageBanner, type HomepageProductEligibilityRecord } from '@/lib/homepage-banners';
 import { persistAdminProductOrder, sortCatalogProducts } from '@/lib/catalog-product-order';
+import { persistCatalogProduct } from '@/lib/catalog-product-persistence';
 
 export const getCatalog = createServerFn({method:'GET'}).handler(async ():Promise<CatalogData>=>{
  const url=process.env['SUPABASE_URL']; const key=process.env['SUPABASE_PUBLISHABLE_KEY'];
@@ -48,8 +49,12 @@ export const getAdminCatalog=createServerFn({method:'GET'}).middleware([adminMid
  return {catalog,quotes:quotes.data};
 });
 const slug=categorySlugSchema;
-export const saveCatalogItem=createServerFn({method:'POST'}).middleware([adminMiddleware]).validator((v:unknown)=>z.discriminatedUnion('kind',[
- z.object({kind:z.literal('product'),slug,category:slug,active:z.boolean(),data:productDataSchema}),
+const productSaveSchema=z.discriminatedUnion('mode',[
+ z.object({kind:z.literal('product'),mode:z.literal('create'),slug,category:slug,active:z.boolean(),data:productDataSchema}),
+ z.object({kind:z.literal('product'),mode:z.literal('update'),originalSlug:slug,slug,category:slug,active:z.boolean(),data:productDataSchema}),
+]);
+export const saveCatalogItem=createServerFn({method:'POST'}).middleware([adminMiddleware]).validator((v:unknown)=>z.union([
+ productSaveSchema,
  z.object({kind:z.literal('category'),mode:z.enum(['create','update']),slug,active:z.boolean(),data:categoryDataSchema}),
  z.object({kind:z.literal('contact'),data:contactSchema})
 ]).parse(v)).handler(async({data,context})=>{
@@ -70,33 +75,59 @@ export const saveCatalogItem=createServerFn({method:'POST'}).middleware([adminMi
   if(r.error)throw new Error('Não foi possível salvar.');
   return {ok:true};
  }
+ if(data.mode==='update'&&data.slug!==data.originalSlug){
+  throw new Error('O slug do produto não pode ser alterado durante a edição.');
+ }
  const category=await context.supabase.from('catalog_categories').select('slug').eq('slug',data.category).maybeSingle();
  if(category.error)throw new Error('Não foi possível verificar a categoria do produto.');
  if(!category.data)throw new Error('A categoria selecionada não existe mais. Atualize o painel e tente novamente.');
- const existingProduct=await context.supabase.from('catalog_products').select('admin_order').eq('slug',data.slug).maybeSingle();
- if(existingProduct.error)throw new Error('Não foi possível verificar a posição administrativa do produto.');
- let adminOrder=existingProduct.data?.admin_order;
- if(adminOrder===undefined||adminOrder===null){
+ if(data.mode==='create'){
+  const duplicateSlug=await context.supabase.from('catalog_products').select('slug').eq('slug',data.slug).maybeSingle();
+  if(duplicateSlug.error)throw new Error('Não foi possível verificar se o slug do produto está disponível.');
+  if(duplicateSlug.data)throw new Error('Já existe um produto com este slug. Informe uma URL diferente.');
+ }
+ const originalSlug=data.mode==='update'?data.originalSlug:undefined;
+ const existingProduct=originalSlug
+  ?await context.supabase.from('catalog_products').select('admin_order').eq('slug',originalSlug).maybeSingle()
+  :null;
+ if(existingProduct?.error)throw new Error('Não foi possível verificar o produto original.');
+ if(data.mode==='update'&&!existingProduct?.data)throw new Error('O produto original não existe mais. Atualize o painel e tente novamente.');
+ let adminOrder=existingProduct?.data?.admin_order;
+ if(data.mode==='create'){
   const lastProduct=await context.supabase.from('catalog_products').select('admin_order').order('admin_order',{ascending:false}).limit(1).maybeSingle();
   if(lastProduct.error)throw new Error('Não foi possível determinar a posição do novo produto.');
   adminOrder=(lastProduct.data?.admin_order??-1)+1;
  }
  const targetSku=data.data.sku?data.data.sku.trim().toLowerCase():'';
  if(targetSku){
-  const existing=await context.supabase.from('catalog_products').select('slug, data').neq('slug',data.slug);
-  if(!existing.error&&existing.data){
-   const duplicate=existing.data.find(r=>{
-    const rawSku=(r.data as Record<string,unknown>|null)?.['sku'];
-    return typeof rawSku==='string'&&rawSku.trim().toLowerCase()===targetSku;
-   });
-   if(duplicate){
-    const dupName=(duplicate.data as Record<string,unknown>|null)?.['name']||duplicate.slug;
-    throw new Error(`O SKU "${data.data.sku.trim()}" já está em uso pelo produto "${dupName}".`);
-   }
+  const existing=await context.supabase.from('catalog_products').select('slug, data');
+  if(existing.error)throw new Error('Não foi possível verificar se o SKU está disponível.');
+  const duplicate=existing.data.find(r=>{
+   if(r.slug===originalSlug)return false;
+   const rawSku=(r.data as Record<string,unknown>|null)?.['sku'];
+   return typeof rawSku==='string'&&rawSku.trim().toLowerCase()===targetSku;
+  });
+  if(duplicate){
+   const dupName=(duplicate.data as Record<string,unknown>|null)?.['name']||duplicate.slug;
+   throw new Error(`O SKU "${data.data.sku.trim()}" já está em uso pelo produto "${dupName}".`);
   }
  }
- const r=await context.supabase.from('catalog_products').upsert({slug:data.slug,category:data.category,active:data.active,data:data.data as Json,admin_order:adminOrder});
- if(r.error)throw new Error('Não foi possível salvar.');
+ const fields={category:data.category,active:data.active,data:data.data as Json};
+ await persistCatalogProduct(
+  data.mode==='create'
+   ?{mode:'create',product:{...fields,slug:data.slug,admin_order:adminOrder??0}}
+   :{mode:'update',originalSlug:data.originalSlug,slug:data.slug,product:fields},
+  {
+   insert:async product=>{
+    const {error}=await context.supabase.from('catalog_products').insert(product);
+    return {error};
+   },
+   update:async(originalSlug,product)=>{
+    const {data:updated,error}=await context.supabase.from('catalog_products').update(product).eq('slug',originalSlug).select('slug').maybeSingle();
+    return {data:updated,error};
+   },
+  },
+ );
  return {ok:true};
 });
 

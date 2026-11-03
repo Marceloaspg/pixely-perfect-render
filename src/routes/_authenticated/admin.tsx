@@ -77,6 +77,7 @@ function Admin(){
  const [busy,setBusy]=useState(false);
  const [previewUrl,setPreviewUrl]=useState<string>('');
  const [categorySlugEdited,setCategorySlugEdited]=useState(false);
+ const [originalProductSlug,setOriginalProductSlug]=useState<string|null>(null);
  const [cropFile,setCropFile]=useState<File|null>(null);
  const [cropTarget,setCropTarget]=useState<'main'|'additional'>('main');
  const [additionalImagePreviews,setAdditionalImagePreviews]=useState<Record<string,string>>({});
@@ -94,7 +95,7 @@ function Admin(){
  const cats=data.catalog.categories;
  const orderedCats=sortCategories(cats);
  const categoryEdit=edit&&!('category' in edit)?edit:null;
- const isExistingProduct = kind === 'product' && !!edit && 'category' in edit && data.catalog.products.some(p => p.slug === edit.slug && p.slug !== '');
+ const isExistingProduct = kind === 'product' && originalProductSlug !== null;
  const isExistingCategory = kind === 'category' && !!categoryEdit && cats.some(c => c.slug === categoryEdit.slug);
 
  const filteredProducts = data.catalog.products.filter(p => {
@@ -247,6 +248,7 @@ function Admin(){
      setEdit(null);
      setPreviewUrl('');
      setCategorySlugEdited(false);
+     setOriginalProductSlug(null);
      setMessage(cleanupError?`Cadastro cancelado, mas não foi possível remover a fotografia temporária: ${cleanupError}`:'');
      setBusy(false);
    }
@@ -268,6 +270,8 @@ function Admin(){
     await save({
       data:{
         kind,
+        mode:originalProductSlug===null?'create':'update',
+        ...(originalProductSlug===null?{}:{originalSlug:originalProductSlug}),
         slug:finalSlug,
         category:edit.category,
         active:edit.active,
@@ -293,6 +297,7 @@ function Admin(){
    setEdit(null);
    setPreviewUrl('');
    setCategorySlugEdited(false);
+   setOriginalProductSlug(null);
    setMessage('Alterações salvas com sucesso.');
   }catch(e){
     setMessage(e instanceof Error ? e.message : 'Não foi possível salvar.');
@@ -308,6 +313,7 @@ function Admin(){
  function startEditProduct(p: Product) {
    clearEditorPreviews();
    setKind('product');
+   setOriginalProductSlug(p.slug);
    setEdit(p);
    setPreviewUrl(p.image || '');
    setAdditionalImagePreviews(Object.fromEntries(p.additionalImagePaths.map((path,index)=>[path,p.additionalImages[index]??''])));
@@ -317,6 +323,7 @@ function Admin(){
  function startNewProduct() {
    clearEditorPreviews();
    setKind('product');
+   setOriginalProductSlug(null);
    setEdit({
      slug:'',
      category:cats[0]?.slug??'',
@@ -333,6 +340,7 @@ function Admin(){
  function startNewCategory() {
    clearEditorPreviews();
    setKind('category');
+   setOriginalProductSlug(null);
    setCategorySlugEdited(false);
    setEdit({
      slug:'',
@@ -603,7 +611,7 @@ function Admin(){
                   <span className={c.active?'font-semibold text-emerald-600':'font-medium text-amber-600'}>{c.active?'Ativa':'Inativa'}</span>
                 </p>
               </div>
-              <Button variant="outline" size="sm" onClick={()=>{setKind('category');setEdit(c);setPreviewUrl(c.image||imageMap[c.imageKey]||'');setCategorySlugEdited(false);setMessage('');}}>
+              <Button variant="outline" size="sm" onClick={()=>{setKind('category');setOriginalProductSlug(null);setEdit(c);setPreviewUrl(c.image||imageMap[c.imageKey]||'');setCategorySlugEdited(false);setMessage('');}}>
                 <Pencil className="mr-1 h-3.5 w-3.5" />Editar
               </Button>
             </div>
