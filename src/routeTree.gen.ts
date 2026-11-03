@@ -17,6 +17,7 @@ import { Route as OrcamentoRouteImport } from './routes/orcamento'
 import { Route as PrivacidadeRouteImport } from './routes/privacidade'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SegmentosRouteImport } from './routes/segmentos'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SobreRouteImport } from './routes/sobre'
 import { Route as TermosRouteImport } from './routes/termos'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
@@ -64,6 +65,11 @@ const SegmentosRoute = SegmentosRouteImport.update({
   path: '/segmentos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SobreRoute = SobreRouteImport.update({
   id: '/sobre',
   path: '/sobre',
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/privacidade': typeof PrivacidadeRoute
   '/reset-password': typeof ResetPasswordRoute
   '/segmentos': typeof SegmentosRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/sobre': typeof SobreRoute
   '/termos': typeof TermosRoute
   '/admin': typeof AuthenticatedAdminRoute
@@ -124,6 +131,7 @@ export interface FileRoutesByTo {
   '/privacidade': typeof PrivacidadeRoute
   '/reset-password': typeof ResetPasswordRoute
   '/segmentos': typeof SegmentosRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/sobre': typeof SobreRoute
   '/termos': typeof TermosRoute
   '/admin': typeof AuthenticatedAdminRoute
@@ -142,6 +150,7 @@ export interface FileRoutesById {
   '/privacidade': typeof PrivacidadeRoute
   '/reset-password': typeof ResetPasswordRoute
   '/segmentos': typeof SegmentosRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/sobre': typeof SobreRoute
   '/termos': typeof TermosRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
@@ -160,6 +169,7 @@ export interface FileRouteTypes {
     | '/privacidade'
     | '/reset-password'
     | '/segmentos'
+    | '/sitemap.xml'
     | '/sobre'
     | '/termos'
     | '/admin'
@@ -176,6 +186,7 @@ export interface FileRouteTypes {
     | '/privacidade'
     | '/reset-password'
     | '/segmentos'
+    | '/sitemap.xml'
     | '/sobre'
     | '/termos'
     | '/admin'
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/privacidade'
     | '/reset-password'
     | '/segmentos'
+    | '/sitemap.xml'
     | '/sobre'
     | '/termos'
     | '/_authenticated/admin'
@@ -211,6 +223,7 @@ export interface RootRouteChildren {
   PrivacidadeRoute: typeof PrivacidadeRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SegmentosRoute: typeof SegmentosRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   SobreRoute: typeof SobreRoute
   TermosRoute: typeof TermosRoute
   CategoriasSlugRoute: typeof CategoriasSlugRoute
@@ -275,6 +288,13 @@ declare module '@tanstack/react-router' {
       path: '/segmentos'
       fullPath: '/segmentos'
       preLoaderRoute: typeof SegmentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sobre': {
@@ -349,6 +369,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacidadeRoute: PrivacidadeRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SegmentosRoute: SegmentosRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   SobreRoute: SobreRoute,
   TermosRoute: TermosRoute,
   CategoriasSlugRoute: CategoriasSlugRoute,
