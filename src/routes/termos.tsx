@@ -120,8 +120,8 @@ function Terms() {
           </a>
           . Dúvidas sobre privacidade e exercício de direitos previstos na LGPD podem ser enviados
           para{" "}
-          <a href="mailto:marceloacessft@gmail.com" className="font-medium text-navy underline">
-            marceloacessft@gmail.com
+          <a href="mailto:contato@majestaembalagens.com.br" className="font-medium text-navy underline">
+            contato@majestaembalagens.com.br
           </a>
           .
         </p>

@@ -29,8 +29,8 @@ export const Route = createFileRoute("/privacidade")({
         </p>
         <p>
           O canal para dúvidas e solicitações sobre privacidade é{" "}
-          <a href="mailto:marceloacessft@gmail.com" className="font-medium text-navy underline">
-            marceloacessft@gmail.com
+          <a href="mailto:contato@majestaembalagens.com.br" className="font-medium text-navy underline">
+            contato@majestaembalagens.com.br
           </a>
           .
         </p>
@@ -106,8 +106,8 @@ export const Route = createFileRoute("/privacidade")({
           acesso aos dados, correção, informação sobre o tratamento, anonimização ou exclusão quando
           cabível, além dos demais direitos previstos em lei. Encaminhe pedidos e dúvidas sobre
           privacidade para{" "}
-          <a href="mailto:marceloacessft@gmail.com" className="font-medium text-navy underline">
-            marceloacessft@gmail.com
+          <a href="mailto:contato@majestaembalagens.com.br" className="font-medium text-navy underline">
+            contato@majestaembalagens.com.br
           </a>
           .
         </p>

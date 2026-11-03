@@ -2,7 +2,7 @@
 // WhatsApp: somente dígitos com DDI e DDD. Nunca usar números fictícios.
 export const siteConfig = {
   whatsapp: "5519996145193",
-  email: "",
+  email: "contato@majestaembalagens.com.br",
   instagram: "",
   facebook: "",
 };
