@@ -88,6 +88,8 @@ describe("categories page", () => {
     expect(within(cards[1]!).getByText("Ver produtos")).toHaveClass("mt-auto");
     expect(within(list).queryByText("Categoria inativa")).not.toBeInTheDocument();
     expect(cards[0]!.querySelector("img")).toHaveAttribute("src", "/signed/primeira.webp");
+    expect(cards[0]!.querySelector("img")).toHaveClass("h-full", "w-full", "object-contain");
+    expect(cards[0]!.querySelector("img")?.parentElement).toHaveClass("aspect-[4/3]", "bg-navy/5");
     expect(cards[1]!.querySelector("img")).toBeNull();
     expect(cards[1]).toHaveAttribute("aria-label", "Ver categoria Segunda categoria");
   });

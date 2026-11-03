@@ -153,7 +153,7 @@ describe("FeaturedProductsCarousel", () => {
     vi.restoreAllMocks();
   });
 
-  it("shows real featured products with their detail links and full-width cover image areas", () => {
+  it("shows real featured products with equal slide gutters and full-width 4:3 contain image areas", () => {
     renderFeatured([createProduct("caixa-1"), createProduct("caixa-2")], ["caixa-1", "caixa-2"]);
 
     expect(screen.getByRole("heading", { name: "Produtos em Destaque" })).toBeInTheDocument();
@@ -163,8 +163,11 @@ describe("FeaturedProductsCarousel", () => {
       "/produtos/caixa-1",
     );
     expect(screen.getAllByRole("img")).toHaveLength(2);
-    expect(screen.getAllByRole("img")[0]?.parentElement).toHaveClass("aspect-[5/4]", "w-full");
-    expect(screen.getAllByRole("img")[0]).toHaveClass("block", "h-full", "object-cover");
+    const images = screen.getAllByRole("img");
+    expect(images[0]?.parentElement).toHaveClass("aspect-[4/3]", "w-full", "bg-navy/5");
+    expect(images[0]).toHaveClass("block", "h-full", "object-contain");
+    expect(images[0]?.closest('[role="group"]')).toHaveClass("px-2");
+    expect(images[1]?.closest('[role="group"]')).toHaveClass("px-2");
     expect(screen.getByRole("region", { name: "Produtos em destaque" })).toHaveClass(
       "overflow-hidden",
     );
