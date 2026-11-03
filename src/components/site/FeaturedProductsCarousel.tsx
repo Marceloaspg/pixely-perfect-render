@@ -227,7 +227,7 @@ export function FeaturedProductsCarousel() {
               {featuredProducts.map((product) => (
                 <div
                   key={product.slug}
-                  className={`min-w-0 shrink-0 pl-4 first:pl-0 ${
+                  className={`min-w-0 shrink-0 px-2 ${
                     slidesPerPage === 1
                       ? "basis-full"
                       : slidesPerPage === 2
@@ -245,14 +245,14 @@ export function FeaturedProductsCarousel() {
                       className="flex h-full flex-col items-stretch focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold"
                       aria-label={`Veja mais sobre ${product.name}`}
                     >
-                      <div className="aspect-[5/4] w-full shrink-0 overflow-hidden bg-muted">
+                      <div className="aspect-[4/3] w-full shrink-0 overflow-hidden bg-navy/5">
                         <img
                           src={product.image}
                           alt={product.name}
                           width={600}
                           height={600}
                           loading="lazy"
-                          className="block h-full w-full object-cover"
+                          className="block h-full w-full object-contain"
                         />
                       </div>
                       <div className="flex min-h-[118px] w-full flex-1 flex-col items-start p-5">

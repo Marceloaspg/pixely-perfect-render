@@ -27,13 +27,13 @@ export function CategoriesPage() {
                     aria-label={`Ver categoria ${category.name}`}
                     className="group flex h-full min-h-56 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-card transition hover:-translate-y-1 hover:border-gold hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2"
                   >
-                    <div className="flex aspect-[16/8] items-center justify-center overflow-hidden bg-secondary">
+                    <div className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-navy/5">
                       {hasAssignedImage && category.image ? (
                         <img
                           src={category.image}
                           alt=""
                           loading="lazy"
-                          className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                          className="h-full w-full object-contain"
                         />
                       ) : (
                         <Package aria-hidden="true" className="h-12 w-12 text-navy/45" strokeWidth={1.5} />
