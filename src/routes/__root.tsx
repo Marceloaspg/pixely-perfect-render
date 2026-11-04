@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { brandIconLinks } from "@/lib/site-identity";
 import { Header, Footer } from "@/components/site/Layout";
 import { CatalogProvider, catalogQuery } from "@/lib/catalog-context";
 import { supabase } from "@/integrations/supabase/client";
@@ -93,7 +94,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" },
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", type: "image/png", href: "/favicon.png" },
+      ...brandIconLinks,
     ],
   }),
   shellComponent: RootShell,

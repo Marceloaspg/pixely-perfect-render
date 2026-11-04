@@ -7,9 +7,12 @@ import { whatsappLink } from "@/lib/config";
 import { FeaturedProductsCarousel } from "@/components/site/FeaturedProductsCarousel";
 import { HomepageCarousel } from "@/components/site/HomepageCarousel";
 import { HomepageHeroCarousel } from "@/components/site/HomepageHeroCarousel";
+import { homepageCanonicalLink, homepageIdentityScripts } from "@/lib/site-identity";
 
 export const Route = createFileRoute("/")({
   head: () => ({
+    links: [homepageCanonicalLink],
+    scripts: [...homepageIdentityScripts],
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
